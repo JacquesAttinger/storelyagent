@@ -1,11 +1,34 @@
 import { TemplateDetails, TemplateFile } from "./sandboxTypes";
 
-export function getTemplateImportantFiles(templateDetails: TemplateDetails, filterRedacted: boolean = true): TemplateFile[] {
+/**
+ * Check if a file path is in a read-only backend directory
+ * Backend, API server, and admin dashboard files are read-only and cannot be modified by the agent
+ */
+export function isBackendReadOnlyFile(filePath: string): boolean {
+    // Files in api-worker/, worker/, and admin-app/ directories are read-only
+    return filePath.startsWith('api-worker/') || 
+           filePath.startsWith('worker/') ||
+           filePath.startsWith('admin-app/'); // Admin dashboard is read-only
+}
+
+/**
+ * Filter out read-only backend files from a list of file paths
+ */
+export function filterReadOnlyFiles(filePaths: string[]): string[] {
+    return filePaths.filter(path => !isBackendReadOnlyFile(path));
+}
+
+export function getTemplateImportantFiles(templateDetails: TemplateDetails, filterRedacted: boolean = true, excludeBackend: boolean = false): TemplateFile[] {
     const { importantFiles, allFiles, redactedFiles } = templateDetails;
     const redactedSet = new Set(redactedFiles);
     
     const result: TemplateFile[] = [];
     for (const [filePath, fileContents] of Object.entries(allFiles)) {
+        // Skip backend files if excludeBackend is true (for write operations only)
+        if (excludeBackend && isBackendReadOnlyFile(filePath)) {
+            continue;
+        }
+        
         if (importantFiles.some(pattern => filePath === pattern || filePath.startsWith(pattern))) {
             const contents = filterRedacted && redactedSet.has(filePath) ? 'REDACTED' : fileContents;
             if (contents) result.push({ filePath, fileContents: contents });
@@ -15,9 +38,16 @@ export function getTemplateImportantFiles(templateDetails: TemplateDetails, filt
     return result;
 }
 
-export function getTemplateFiles(templateDetails: TemplateDetails): TemplateFile[] {
-    return Object.entries(templateDetails.allFiles).map(([filePath, fileContents]) => ({
+export function getTemplateFiles(templateDetails: TemplateDetails, excludeBackend: boolean = false): TemplateFile[] {
+    const files = Object.entries(templateDetails.allFiles).map(([filePath, fileContents]) => ({
         filePath,
         fileContents,
     }));
+    
+    // Filter out backend files if excludeBackend is true (for write operations only)
+    if (excludeBackend) {
+        return files.filter(file => !isBackendReadOnlyFile(file.filePath));
+    }
+    
+    return files;
 }

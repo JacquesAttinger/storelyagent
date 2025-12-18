@@ -14,12 +14,29 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
 
         switch (parsedMessage.type) {
             case WebSocketMessageRequests.GENERATE_ALL:
+                // Check if we're waiting for store info - don't start generation yet
+                if (agent.state.storeInfoPending) {
+                    logger.info('Cannot start generation - waiting for store info from user');
+                    return;
+                }
+
+                // Check if agent is initialized before starting generation
+                if (!agent.state.templateName || agent.state.templateName.trim() === '') {
+                    logger.warn('Cannot start generation - agent not initialized (template name not set)');
+                    return;
+                }
+
+                if (!agent.state.blueprint || Object.keys(agent.state.blueprint).length === 0) {
+                    logger.warn('Cannot start generation - agent not initialized (blueprint not set)');
+                    return;
+                }
+
                 // Set shouldBeGenerating flag to indicate persistent intent
-                agent.setState({ 
-                    ...agent.state, 
-                    shouldBeGenerating: true 
+                agent.setState({
+                    ...agent.state,
+                    shouldBeGenerating: true
                 });
-                
+
                 // Check if generation is already active to avoid duplicate processes
                 if (agent.isCodeGenerating()) {
                     logger.info('Generation already in progress, skipping duplicate request');
@@ -28,7 +45,7 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
                     // });
                     return;
                 }
-                
+
                 // Start generation process
                 logger.info('Starting code generation process');
                 agent.generateAllFiles().catch(error => {
@@ -38,9 +55,9 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
                     // Only clear shouldBeGenerating on successful completion
                     // (errors might want to retry, so this could be handled differently)
                     if (!agent.isCodeGenerating()) {
-                        agent.setState({ 
-                            ...agent.state, 
-                            shouldBeGenerating: false 
+                        agent.setState({
+                            ...agent.state,
+                            shouldBeGenerating: false
                         });
                     }
                 });
@@ -78,18 +95,18 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
                 break;
             case WebSocketMessageRequests.STOP_GENERATION:
                 logger.info('User requested to stop generation');
-                
+
                 // Cancel current inference operation
                 const wasCancelled = agent.cancelCurrentInference();
-                
+
                 // Clear shouldBeGenerating flag
-                agent.setState({ 
-                    ...agent.state, 
-                    shouldBeGenerating: false 
+                agent.setState({
+                    ...agent.state,
+                    shouldBeGenerating: false
                 });
-                
+
                 sendToConnection(connection, WebSocketMessageResponses.GENERATION_STOPPED, {
-                    message: wasCancelled 
+                    message: wasCancelled
                         ? 'Inference operation cancelled successfully'
                         : 'No active inference to cancel'
                 });
@@ -97,11 +114,11 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
             case WebSocketMessageRequests.RESUME_GENERATION:
                 // Set shouldBeGenerating and restart generation
                 logger.info('Resuming code generation');
-                agent.setState({ 
-                    ...agent.state, 
-                    shouldBeGenerating: true 
+                agent.setState({
+                    ...agent.state,
+                    shouldBeGenerating: true
                 });
-                
+
                 if (!agent.isCodeGenerating()) {
                     sendToConnection(connection, WebSocketMessageResponses.GENERATION_RESUMED, {
                         message: 'Code generation resumed'
@@ -131,19 +148,19 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
                     hasImages: !!parsedMessage.images && parsedMessage.images.length > 0,
                     imageCount: parsedMessage.images?.length || 0
                 });
-                
+
                 if (!parsedMessage.message) {
                     sendError(connection, 'No message provided in user suggestion');
                     return;
                 }
-                
+
                 // Validate image count and size
                 if (parsedMessage.images && parsedMessage.images.length > 0) {
                     if (parsedMessage.images.length > MAX_IMAGES_PER_MESSAGE) {
                         sendError(connection, `Maximum ${MAX_IMAGES_PER_MESSAGE} images allowed per message. Received ${parsedMessage.images.length} images.`);
                         return;
                     }
-                    
+
                     // Validate each image size
                     for (const image of parsedMessage.images) {
                         if (image.size > MAX_IMAGE_SIZE_BYTES) {
@@ -152,7 +169,7 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
                         }
                     }
                 }
-                
+
                 agent.handleUserInput(parsedMessage.message, parsedMessage.images).catch((error: unknown) => {
                     logger.error('Error handling user suggestion:', error);
                     sendError(connection, `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`);
@@ -179,7 +196,7 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
                     const state = agent.getConversationState();
                     const debugState = agent.getDeepDebugSessionState();
                     logger.info('Conversation state retrieved', state);
-                    sendToConnection(connection, WebSocketMessageResponses.CONVERSATION_STATE, { 
+                    sendToConnection(connection, WebSocketMessageResponses.CONVERSATION_STATE, {
                         state,
                         deepDebugSession: debugState
                     });
@@ -195,12 +212,12 @@ export function handleWebSocketMessage(agent: SimpleCodeGeneratorAgent, connecti
             //         command: parsedMessage.command,
             //         timestamp: parsedMessage.timestamp
             //     });
-                
+
             //     if (!parsedMessage.command) {
             //         sendError(connection, 'No command provided');
             //         return;
             //     }
-                
+
             //     // Execute terminal command  
             //     agent.executeTerminalCommand(parsedMessage.command, connection as any)
             //         .catch((error: unknown) => {
@@ -237,8 +254,8 @@ export function broadcastToConnections<T extends WebSocketMessageType>(
 }
 
 export function sendToConnection<T extends WebSocketMessageType>(
-    connection: WebSocket, 
-    type: T, 
+    connection: WebSocket,
+    type: T,
     data: WebSocketMessageData<T>
 ): void {
     try {

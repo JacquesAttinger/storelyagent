@@ -49,7 +49,7 @@ export class AppService extends BaseService {
     /**
      * Create a new app
      */
-    async createApp(appData:schema.NewApp): Promise<schema.App> {
+    async createApp(appData: schema.NewApp): Promise<schema.App> {
         const [app] = await this.database
             .insert(schema.apps)
             .values({
@@ -77,7 +77,7 @@ export class AppService extends BaseService {
             const whereConditions = this.buildPublicAppConditions(framework, search);
             const whereClause = this.buildWhereConditions(whereConditions);
             const readDb = this.getReadDb('fast');
-            
+
             const basicApps = await this.executeRankedQuery(
                 readDb,
                 whereClause,
@@ -131,11 +131,11 @@ export class AppService extends BaseService {
             const appIds = basicApps.map((row: RankedAppQueryResult) => row.app.id);
 
             const { userStars, userFavorites } = await this.addUserSpecificAppData(appIds, userId);
-            
+
             const appsWithAnalytics: EnhancedAppData[] = basicApps.map((row: RankedAppQueryResult) => {
                 const isStarred = userStars.has(row.app.id);
                 const isFavorited = userFavorites.has(row.app.id);
-                
+
                 return {
                     ...row.app,
                     userName: row.userName,
@@ -176,11 +176,11 @@ export class AppService extends BaseService {
      */
     private buildCommonAppFilters(framework?: string, search?: string): WhereCondition[] {
         const conditions: WhereCondition[] = [];
-        
+
         if (framework) {
             conditions.push(eq(schema.apps.framework, framework));
         }
-        
+
         if (search) {
             const searchTerm = `%${search.toLowerCase()}%`;
             conditions.push(
@@ -190,7 +190,7 @@ export class AppService extends BaseService {
                 )
             );
         }
-        
+
         return conditions.filter(Boolean);
     }
 
@@ -198,7 +198,7 @@ export class AppService extends BaseService {
      * Helper to build public app query conditions
      */
     private buildPublicAppConditions(
-        framework?: string, 
+        framework?: string,
         search?: string
     ): WhereCondition[] {
         const whereConditions: WhereCondition[] = [
@@ -232,9 +232,9 @@ export class AppService extends BaseService {
         try {
             await this.database
                 .update(schema.apps)
-                .set({ 
-                    ...updates, 
-                    updatedAt: new Date() 
+                .set({
+                    ...updates,
+                    updatedAt: new Date()
                 })
                 .where(eq(schema.apps.id, appId));
             return true;
@@ -288,14 +288,14 @@ export class AppService extends BaseService {
      * Optimized to fetch favorites separately to avoid subquery memory issues
      */
     async getUserAppsWithFavorites(
-        userId: string, 
+        userId: string,
         options: PaginationParams = {}
     ): Promise<AppWithFavoriteStatus[]> {
         const { limit = 50, offset = 0 } = options;
-        
+
         // Use 'fresh' strategy for user's own data to ensure they see latest changes
         const readDb = this.getReadDb('fresh');
-        
+
         // Fetch user's apps first
         const apps = await readDb
             .select()
@@ -332,7 +332,7 @@ export class AppService extends BaseService {
      * Get recent user apps with favorite status
      */
     async getRecentAppsWithFavorites(
-        userId: string, 
+        userId: string,
         limit: number = 10
     ): Promise<AppWithFavoriteStatus[]> {
         return this.getUserAppsWithFavorites(userId, { limit, offset: 0 });
@@ -430,12 +430,12 @@ export class AppService extends BaseService {
      * Optimized to fetch favorite status separately
      */
     async getSingleAppWithFavoriteStatus(
-        appId: string, 
+        appId: string,
         userId: string
     ): Promise<AppWithFavoriteStatus | null> {
         // Use 'fresh' strategy since this includes user-specific favorite status
         const readDb = this.getReadDb('fresh');
-        
+
         // Fetch app first
         const app = await readDb
             .select()
@@ -523,7 +523,7 @@ export class AppService extends BaseService {
      */
     async getAppDetails(appId: string, userId?: string): Promise<EnhancedAppData | null> {
         const readDb = this.getReadDb('fast');
-        
+
         const appResult = await readDb
             .select({
                 app: schema.apps,
@@ -544,7 +544,7 @@ export class AppService extends BaseService {
         // Get stats in parallel using same pattern as analytics service
         // Use 'fresh' strategy for user-specific queries for consistency
         const userReadDb = userId ? this.getReadDb('fresh') : readDb;
-        
+
         const [viewCount, starCount, isFavorite, userHasStarred] = await Promise.all([
             // View count
             readDb
@@ -553,7 +553,7 @@ export class AppService extends BaseService {
                 .where(eq(schema.appViews.appId, appId))
                 .get()
                 .then(r => r?.count || 0),
-            
+
             // Star count
             readDb
                 .select({ count: sql<number>`count(*)` })
@@ -561,7 +561,7 @@ export class AppService extends BaseService {
                 .where(eq(schema.stars.appId, appId))
                 .get()
                 .then(r => r?.count || 0),
-            
+
             // Is favorited by current user
             userId ? userReadDb
                 .select({ id: schema.favorites.id })
@@ -572,7 +572,7 @@ export class AppService extends BaseService {
                 ))
                 .get()
                 .then(r => !!r) : false,
-            
+
             // Is starred by current user
             userId ? userReadDb
                 .select({ id: schema.stars.id })
@@ -584,7 +584,7 @@ export class AppService extends BaseService {
                 .get()
                 .then(r => !!r) : false
         ]);
-        
+
         return {
             ...app,
             userName: appResult.userName,
@@ -666,14 +666,14 @@ export class AppService extends BaseService {
      * Get user apps with analytics data
      */
     async getUserAppsWithAnalytics(userId: string, options: Partial<AppQueryOptions> = {}): Promise<EnhancedAppData[]> {
-        const { 
-            limit = 50, 
-            offset = 0, 
-            status, 
-            visibility, 
+        const {
+            limit = 50,
+            offset = 0,
+            status,
+            visibility,
             framework,
             search,
-            sort = 'recent', 
+            sort = 'recent',
             order = 'desc',
             period = 'all'
         } = options;
@@ -686,7 +686,7 @@ export class AppService extends BaseService {
         ];
 
         const whereClause = this.buildWhereConditions(whereConditions);
-        
+
         // Handle starred sort separately
         if (sort === 'starred') {
             const results = await this.database
@@ -703,7 +703,7 @@ export class AppService extends BaseService {
                 .orderBy(desc(schema.favorites.createdAt))
                 .limit(limit)
                 .offset(offset);
-                
+
             return results.map(r => ({
                 ...r.app,
                 userName: r.userName,
@@ -733,7 +733,7 @@ export class AppService extends BaseService {
 
         const appIds = basicApps.map((row: RankedAppQueryResult) => row.app.id);
         const { userStars, userFavorites } = await this.addUserSpecificAppData(appIds, userId);
-        
+
         return basicApps.map((row: RankedAppQueryResult) => ({
             ...row.app,
             userName: row.userName,
@@ -796,19 +796,19 @@ export class AppService extends BaseService {
         if (sort === 'trending' || sort === 'popular') {
             const periodThreshold = sort === 'trending' ? this.getTimePeriodThreshold(period) : null;
             const periodUnixTimestamp = periodThreshold ? Math.floor(periodThreshold.getTime() / 1000) : 0;
-            
+
             // Define count subqueries
             const viewCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.appViews} WHERE ${schema.appViews.appId} = ${schema.apps.id})`;
             const starCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id})`;
             const forkCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.apps} AS forks WHERE forks.parent_app_id = ${schema.apps.id})`;
-            
+
             if (sort === 'popular') {
                 // Popular algorithm: (views*1 + stars*3) DESC
                 const orderByExpression = sql`(
                     ${viewCountSubquery} * ${this.RANKING_WEIGHTS.VIEWS} +
                     ${starCountSubquery} * ${this.RANKING_WEIGHTS.STARS}
                 ) DESC`;
-                
+
                 return db
                     .select({
                         app: schema.apps,
@@ -828,7 +828,7 @@ export class AppService extends BaseService {
                 // Trending algorithm: Activity score (scaled by 10M) + recency bonus
                 const recentViewsSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.appViews} WHERE ${schema.appViews.appId} = ${schema.apps.id} AND ${schema.appViews.viewedAt} >= ${periodUnixTimestamp})`;
                 const recentStarsSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id} AND ${schema.stars.starredAt} >= ${periodUnixTimestamp})`;
-                
+
                 const orderByExpression = sql`(
                     (
                         ${recentViewsSubquery} * ${this.RANKING_WEIGHTS.VIEWS} +
@@ -836,7 +836,7 @@ export class AppService extends BaseService {
                     ) * 10000000 + 
                     CAST((1000000 / (1.0 + (strftime('%s', 'now') - ${schema.apps.updatedAt}) / 86400.0)) AS INTEGER)
                 ) DESC`;
-                
+
                 return db
                     .select({
                         app: schema.apps,
@@ -858,10 +858,10 @@ export class AppService extends BaseService {
         } else {
             // Simple query for recent/starred sorts
             const direction = order === 'asc' ? asc : desc;
-            const orderByExpression = sort === 'starred' 
+            const orderByExpression = sort === 'starred'
                 ? sql`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id}) DESC`
                 : direction(schema.apps.updatedAt);
-                
+
             return db
                 .select({
                     app: schema.apps,
@@ -887,7 +887,7 @@ export class AppService extends BaseService {
     }
 
     private async addUserSpecificAppData(
-        appIds: string[], 
+        appIds: string[],
         userId?: string
     ): Promise<{ userStars: Set<string>; userFavorites: Set<string> }> {
         if (!userId || appIds.length === 0) {
@@ -895,7 +895,7 @@ export class AppService extends BaseService {
         }
 
         const userReadDb = this.getReadDb('fresh');
-        
+
         // Use Drizzle's inArray for better compatibility
         // We'll batch if needed to avoid D1 limits
         const BATCH_SIZE = 50;
@@ -906,7 +906,7 @@ export class AppService extends BaseService {
             // Process in batches if needed
             for (let i = 0; i < appIds.length; i += BATCH_SIZE) {
                 const batch = appIds.slice(i, i + BATCH_SIZE);
-                
+
                 // Fetch stars and favorites for this batch
                 const [starsResult, favoritesResult] = await Promise.all([
                     userReadDb
@@ -966,43 +966,43 @@ export class AppService extends BaseService {
         try {
             // First check if app exists and user owns it
             const ownershipResult = await this.checkAppOwnership(appId, userId);
-            
+
             if (!ownershipResult.exists) {
                 return { success: false, error: 'App not found' };
             }
-            
+
             if (!ownershipResult.isOwner) {
                 return { success: false, error: 'You can only delete your own apps' };
             }
 
             // Delete related records first (foreign key constraints)
             // This follows the cascade delete pattern for data integrity
-            
+
             // Delete favorites
             await this.database
                 .delete(schema.favorites)
                 .where(eq(schema.favorites.appId, appId));
-            
+
             // Delete stars  
             await this.database
                 .delete(schema.stars)
                 .where(eq(schema.stars.appId, appId));
-            
+
             // Delete app views
             await this.database
                 .delete(schema.appViews)
                 .where(eq(schema.appViews.appId, appId));
-            
+
             // Handle fork relationships properly
             // If this app is a parent, make forks independent (don't delete them!)
             await this.database
                 .update(schema.apps)
                 .set({ parentAppId: null })
                 .where(eq(schema.apps.parentAppId, appId));
-            
+
             // If this app is a fork, we don't need to do anything special
             // (the parent fork count will be handled by analytics recalculation)
-            
+
             // Finally delete the app itself
             const deleteResult = await this.database
                 .delete(schema.apps)
@@ -1020,6 +1020,114 @@ export class AppService extends BaseService {
         } catch (error) {
             this.logger?.error('Error deleting app:', error);
             return { success: false, error: 'An error occurred while deleting the app' };
+        }
+    }
+
+    // ========================================
+    // SUBDOMAIN OPERATIONS
+    // ========================================
+
+    /**
+     * Check if a subdomain is available
+     */
+    async isSubdomainAvailable(subdomain: string): Promise<boolean> {
+        const readDb = this.getReadDb('fast');
+        const existing = await readDb
+            .select({ id: schema.apps.id })
+            .from(schema.apps)
+            .where(eq(schema.apps.customSubdomain, subdomain.toLowerCase()))
+            .get();
+
+        return !existing;
+    }
+
+    /**
+     * Get an app by its custom subdomain
+     */
+    async getAppBySubdomain(subdomain: string): Promise<schema.App | null> {
+        const readDb = this.getReadDb('fast');
+        const app = await readDb
+            .select()
+            .from(schema.apps)
+            .where(eq(schema.apps.customSubdomain, subdomain.toLowerCase()))
+            .get();
+
+        return app || null;
+    }
+
+    /**
+     * Update app's custom subdomain
+     * Returns true if successful, false if subdomain is taken or user doesn't own the app
+     */
+    async updateSubdomain(appId: string, userId: string, subdomain: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            const normalizedSubdomain = subdomain.toLowerCase();
+
+            // Check ownership
+            const ownership = await this.checkAppOwnership(appId, userId);
+            if (!ownership.exists) {
+                return { success: false, error: 'App not found' };
+            }
+            if (!ownership.isOwner) {
+                return { success: false, error: 'You do not own this app' };
+            }
+
+            // Check if subdomain is available (excluding current app)
+            const existing = await this.database
+                .select({ id: schema.apps.id })
+                .from(schema.apps)
+                .where(and(
+                    eq(schema.apps.customSubdomain, normalizedSubdomain),
+                    sql`${schema.apps.id} != ${appId}`
+                ))
+                .get();
+
+            if (existing) {
+                return { success: false, error: 'Subdomain is already taken' };
+            }
+
+            // Update the subdomain
+            await this.database
+                .update(schema.apps)
+                .set({
+                    customSubdomain: normalizedSubdomain,
+                    updatedAt: new Date()
+                })
+                .where(eq(schema.apps.id, appId));
+
+            return { success: true };
+        } catch (error) {
+            this.logger?.error('Error updating subdomain:', error);
+            return { success: false, error: 'An error occurred while updating subdomain' };
+        }
+    }
+
+    /**
+     * Clear app's custom subdomain
+     */
+    async clearSubdomain(appId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            // Check ownership
+            const ownership = await this.checkAppOwnership(appId, userId);
+            if (!ownership.exists) {
+                return { success: false, error: 'App not found' };
+            }
+            if (!ownership.isOwner) {
+                return { success: false, error: 'You do not own this app' };
+            }
+
+            await this.database
+                .update(schema.apps)
+                .set({
+                    customSubdomain: null,
+                    updatedAt: new Date()
+                })
+                .where(eq(schema.apps.id, appId));
+
+            return { success: true };
+        } catch (error) {
+            this.logger?.error('Error clearing subdomain:', error);
+            return { success: false, error: 'An error occurred while clearing subdomain' };
         }
     }
 }

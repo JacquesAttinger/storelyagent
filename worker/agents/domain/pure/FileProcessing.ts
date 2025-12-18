@@ -3,7 +3,7 @@ import type { StructuredLogger } from '../../../logger';
 import { TemplateDetails } from '../../../services/sandbox/sandboxTypes';
 import { applyUnifiedDiff } from '../../output-formats/diff-formats';
 import { FileState } from 'worker/agents/core/state';
-import { getTemplateFiles, getTemplateImportantFiles } from 'worker/services/sandbox/utils';
+import { getTemplateFiles, getTemplateImportantFiles, isBackendReadOnlyFile } from 'worker/services/sandbox/utils';
 
 /**
  * File processing utilities
@@ -103,12 +103,16 @@ export class FileProcessing {
         generatedFilesMap: Record<string, FileState>,
         onlyImportantFiles: boolean = false
     ): FileState[] {
-        const templateFiles = templateDetails?.allFiles ? (onlyImportantFiles ? getTemplateImportantFiles(templateDetails) : getTemplateFiles(templateDetails)) : [];
+        // Include all template files (including backend/admin) so agent can read them
+        const templateFiles = templateDetails?.allFiles ? (onlyImportantFiles ? getTemplateImportantFiles(templateDetails, true, false) : getTemplateFiles(templateDetails, false)) : [];
         
         // Filter out template files that have been overridden by generated files
         const nonOverriddenTemplateFiles = templateFiles.filter(
             file => !generatedFilesMap[file.filePath]
         );
+        
+        // Include all generated files (agent can read backend files, but can't write to them)
+        const allGeneratedFiles = Object.values(generatedFilesMap);
         
         return [
             ...nonOverriddenTemplateFiles.map(file => ({
@@ -119,7 +123,7 @@ export class FileProcessing {
                 unmerged: [],
                 lasthash: '',
             })),
-            ...Object.values(generatedFilesMap)
+            ...allGeneratedFiles
         ];
     }
 }

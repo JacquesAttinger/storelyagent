@@ -182,3 +182,116 @@ Edit `/worker/agents/operations/UserConversationProcessor.ts` (system prompt lin
 - Keep comments concise and purposeful
 - Write production-ready code
 - Test thoroughly before submitting
+
+## Base Store Template
+
+The `templates/templates/base-store/` directory contains the full-stack ecommerce template used for store generation.
+
+**Template Structure:**
+```
+templates/templates/base-store/
+├── storefront-app/        # Customer-facing storefront (Express + Liquid)
+│   ├── server.js          # Express server with LiquidJS
+│   ├── theme/
+│   │   ├── layouts/       # Base layouts (theme.liquid) - PROTECTED
+│   │   ├── templates/     # Page templates (index, product, cart, etc.)
+│   │   ├── snippets/      # Reusable components (header, footer, product-card)
+│   │   ├── assets/        # CSS, JS files
+│   │   └── config/        # Liquid filters
+│   └── package.json
+├── admin-app/             # Admin dashboard (Express + Liquid)
+│   ├── server.js
+│   ├── theme/
+│   └── package.json
+├── api-worker/            # Cloudflare Workers API (Hono)
+│   ├── src/
+│   │   ├── index.ts
+│   │   ├── middleware/
+│   │   ├── routes/
+│   │   └── types.ts
+│   └── wrangler.toml
+├── infra/db/              # Database schema and seeds
+├── .donttouch_files.json  # Files protected from AI modification
+├── .important_files.json  # Key files AI should focus on
+├── .redacted_files.json   # Files hidden from AI
+└── CLAUDE.md              # Template-specific documentation
+```
+
+**Key Configuration Files:**
+- `.donttouch_files.json` - List of files the AI agent should NEVER modify
+- `.important_files.json` - List of key files to highlight during generation
+- `.redacted_files.json` - List of files hidden from AI context
+- `template_catalog.json` (parent dir) - Template metadata for AI selection
+
+## Template Management
+
+Templates are stored in Cloudflare R2 and used by the store generation system.
+
+**Updating the Base Store Template:**
+
+1. **Make changes to the template files:**
+   ```bash
+   cd templates/templates/base-store
+   # Edit files as needed
+   ```
+
+2. **Test locally to ensure template works:**
+   ```bash
+   npm install
+   npm run dev  # Runs all services concurrently
+   ```
+
+3. **Deploy updated template to R2:**
+   ```bash
+   cd templates/
+   
+   # Set required environment variables
+   export BUCKET_NAME=your-r2-bucket-name
+   export CLOUDFLARE_API_TOKEN=your-api-token
+   export CLOUDFLARE_ACCOUNT_ID=your-account-id
+   
+   # Run deployment (creates zip and uploads to R2)
+   ./deploy_templates.sh
+   ```
+
+**What deploy_templates.sh does:**
+1. Uploads `template_catalog.json` to R2
+2. Creates a zip file of each template in `templates/` (excluding node_modules, .git, etc.)
+3. Uploads zip files to R2 (e.g., `base-store.zip`)
+
+**Replacing a Template Version:**
+
+To completely replace a template with a new version:
+
+1. **Delete existing template files from R2:**
+   ```bash
+   wrangler r2 object delete $BUCKET_NAME/base-store.zip
+   ```
+
+2. **Update the template source files** in `templates/templates/base-store/`
+
+3. **Redeploy:**
+   ```bash
+   ./deploy_templates.sh
+   ```
+
+**Troubleshooting Template Issues:**
+
+- **Blank stores**: Check `storefront-app/theme/layouts/theme.liquid` is protected in `.donttouch_files.json`
+- **Template too large (>50MB)**: Ensure `node_modules` is excluded (check deploy script)
+- **Missing files**: Verify file paths and ensure files aren't in `.redacted_files.json`
+
+**Protected Files (Critical):**
+The `storefront-app/theme/layouts/theme.liquid` file is essential - if removed, stores render blank pages. This file is protected via `.donttouch_files.json`.
+
+## Prompt Engineering
+
+AI prompts for code generation are located in:
+- `/worker/agents/planning/blueprint.ts` - Blueprint generation prompts
+- `/worker/agents/operations/PhaseGeneration.ts` - Phase generation prompts
+
+When modifying prompts, be explicit about requirements to prevent:
+- Empty layout files
+- Hardcoded data instead of API calls
+- Non-functional UI elements
+- Missing SEO/accessibility features

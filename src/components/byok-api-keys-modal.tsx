@@ -40,7 +40,6 @@ import OpenAILogo from '@/assets/provider-logos/openai.svg?react';
 import AnthropicLogo from '@/assets/provider-logos/anthropic.svg?react';
 import GoogleLogo from '@/assets/provider-logos/google.svg?react';
 import CerebrasLogo from '@/assets/provider-logos/cerebras.svg?react';
-import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 
 interface ByokApiKeysModalProps {
   isOpen: boolean;
@@ -81,7 +80,7 @@ interface BYOKProvider {
  */
 function templateToBYOKProvider(template: SecretTemplate): BYOKProvider {
   const logo = PROVIDER_LOGOS[template.provider] || (() => <div className="w-4 h-4 bg-gray-300 rounded" />);
-  
+
   return {
     id: template.id,
     name: template.displayName.replace(' (BYOK)', ''),
@@ -95,14 +94,14 @@ function templateToBYOKProvider(template: SecretTemplate): BYOKProvider {
 export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysModalProps) {
   // Tab management
   const [activeTab, setActiveTab] = useState<'add' | 'manage'>('add');
-  
+
   // Add keys tab state
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [byokProviders, setBYOKProviders] = useState<BYOKProvider[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Manage keys tab state
   const [managedSecrets, setManagedSecrets] = useState<ManagedSecret[]>([]);
   const [loadingSecrets, setLoadingSecrets] = useState(false);
@@ -121,13 +120,13 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
       setSelectedProvider(null);
       setApiKey('');
       setIsSaving(false);
-      
+
       // Reset manage keys tab
       setToggleLoadingId(null);
       setDeleteDialogOpen(false);
       setSecretToDelete(null);
       setIsDeleting(false);
-      
+
       // Load data
       loadBYOKProviders();
       loadManagedSecrets();
@@ -138,7 +137,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
     try {
       setIsLoading(true);
       const response = await apiClient.getBYOKTemplates();
-      
+
       if (response.success && response.data) {
         const providers = response.data.templates.map(templateToBYOKProvider);
         setBYOKProviders(providers);
@@ -157,17 +156,17 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
     try {
       setLoadingSecrets(true);
       const response = await apiClient.getAllSecrets(); // Use getAllSecrets for toggle functionality
-      
+
       if (response.success && response.data) {
         // Filter BYOK secrets only (show both active and inactive for management)
-        const byokSecrets = response.data.secrets.filter(secret => 
+        const byokSecrets = response.data.secrets.filter(secret =>
           secret.secretType.endsWith('_BYOK')
         );
-        
+
         // Convert to ManagedSecret format with logos
         const managedSecrets: ManagedSecret[] = byokSecrets.map(secret => {
           const logo = PROVIDER_LOGOS[secret.provider] || (() => <div className="w-4 h-4 bg-gray-300 rounded" />);
-          
+
           return {
             id: secret.id,
             name: secret.name,
@@ -179,7 +178,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
             logo
           };
         });
-        
+
         setManagedSecrets(managedSecrets);
       } else {
         toast.error('Failed to load managed secrets');
@@ -216,11 +215,11 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 
       toast.success(`${provider.name} API key added successfully!`);
       onKeyAdded?.();
-      
+
       // Reload managed secrets and switch to manage tab
       await loadManagedSecrets();
       setActiveTab('manage');
-      
+
       // Reset add form
       setSelectedProvider(null);
       setApiKey('');
@@ -231,27 +230,27 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
       setIsSaving(false);
     }
   };
-  
+
   // Toggle secret active status
   const handleToggleSecret = async (secretId: string) => {
     setToggleLoadingId(secretId);
-    
+
     try {
       const response = await apiClient.toggleSecret(secretId);
-      
+
       if (response.success && response.data) {
         const updatedSecret = response.data.secret;
         toast.success(response.data.message);
-        
+
         // Update local state
-        setManagedSecrets(prev => 
-          prev.map(secret => 
-            secret.id === secretId 
+        setManagedSecrets(prev =>
+          prev.map(secret =>
+            secret.id === secretId
               ? { ...secret, isActive: updatedSecret.isActive ?? false }
               : secret
           )
         );
-        
+
         // Notify parent about key changes
         onKeyAdded?.();
       } else {
@@ -264,25 +263,25 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
       setToggleLoadingId(null);
     }
   };
-  
+
   // Delete secret
   const handleDeleteSecret = async () => {
     if (!secretToDelete) return;
-    
+
     setIsDeleting(true);
-    
+
     try {
       await apiClient.deleteSecret(secretToDelete.id);
       toast.success(`${secretToDelete.name} API key deleted successfully`);
-      
+
       // Remove from local state
-      setManagedSecrets(prev => 
+      setManagedSecrets(prev =>
         prev.filter(secret => secret.id !== secretToDelete.id)
       );
-      
+
       // Notify parent about key changes
       onKeyAdded?.();
-      
+
       // Close dialog
       setDeleteDialogOpen(false);
       setSecretToDelete(null);
@@ -293,12 +292,12 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
       setIsDeleting(false);
     }
   };
-  
+
   const openDeleteDialog = (secret: ManagedSecret) => {
     setSecretToDelete(secret);
     setDeleteDialogOpen(true);
   };
-  
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -316,9 +315,6 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
             <DialogTitle className="flex items-center gap-2">
               <Key className="h-5 w-5" />
               Bring Your Own Key
-              <span className="flex items-center gap-1 text-xs text-text-tertiary font-normal">
-                via <CloudflareLogo className="h-3 w-3" /> AI Gateway
-              </span>
             </DialogTitle>
             <DialogDescription>
               Add your API keys to use your own provider accounts for billing, or manage existing keys
@@ -360,11 +356,10 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                         <button
                           key={providerOption.id}
                           onClick={() => handleProviderSelect(providerOption.id)}
-                          className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-200 text-left ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                          }`}
+                          className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all duration-200 text-left ${isSelected
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                            }`}
                         >
                           <div className="flex items-center justify-center w-8 h-8 bg-white rounded-md border shadow-sm">
                             <LogoComponent className="h-5 w-5" />
@@ -390,13 +385,12 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
                       placeholder={provider.placeholder}
-                      className={`pr-10 ${
-                        apiKey 
-                          ? isKeyFormatValid 
-                            ? 'border-green-500 focus:border-green-500' 
-                            : 'border-red-500 focus:border-red-500'
-                          : ''
-                      }`}
+                      className={`pr-10 ${apiKey
+                        ? isKeyFormatValid
+                          ? 'border-green-500 focus:border-green-500'
+                          : 'border-red-500 focus:border-red-500'
+                        : ''
+                        }`}
                     />
                     {apiKey && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -446,36 +440,33 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                       {managedSecrets.filter(s => s.isActive).length} active, {managedSecrets.length} total
                     </Badge>
                   </div>
-                  
+
                   <div className="space-y-3">
                     {managedSecrets.map((secret) => {
                       const LogoComponent = secret.logo;
                       const isTogglingThis = toggleLoadingId === secret.id;
-                      
+
                       return (
-                        <div key={secret.id} className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
-                          secret.isActive 
-                            ? 'hover:bg-bg-3/50' 
-                            : 'bg-bg-3/20 border-dashed hover:bg-bg-3/30'
-                        }`}>
-                          {/* Provider Logo */}
-                          <div className={`flex items-center justify-center w-8 h-8 rounded-md border shadow-sm ${
-                            secret.isActive 
-                              ? 'bg-white' 
-                              : 'bg-bg-3 border-dashed opacity-60'
+                        <div key={secret.id} className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${secret.isActive
+                          ? 'hover:bg-bg-3/50'
+                          : 'bg-bg-3/20 border-dashed hover:bg-bg-3/30'
                           }`}>
+                          {/* Provider Logo */}
+                          <div className={`flex items-center justify-center w-8 h-8 rounded-md border shadow-sm ${secret.isActive
+                            ? 'bg-white'
+                            : 'bg-bg-3 border-dashed opacity-60'
+                            }`}>
                             <LogoComponent className={`h-5 w-5 ${secret.isActive ? '' : 'opacity-60'}`} />
                           </div>
-                          
+
                           {/* Key Info */}
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center gap-2">
-                              <span className={`font-medium capitalize ${
-                                secret.isActive ? '' : 'opacity-60'
-                              }`}>
+                              <span className={`font-medium capitalize ${secret.isActive ? '' : 'opacity-60'
+                                }`}>
                                 {secret.name.replace(' (BYOK)', '')}
                               </span>
-                              <Badge 
+                              <Badge
                                 variant={secret.isActive ? "default" : "outline"}
                                 className={`text-xs ${secret.isActive ? '' : 'opacity-60'}`}
                               >
@@ -497,11 +488,11 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                               )}
                             </div>
                           </div>
-                          
+
                           {/* Controls */}
                           <div className="flex items-center gap-3">
                             <div className="flex items-center gap-2">
-                              <Switch 
+                              <Switch
                                 checked={secret.isActive}
                                 onCheckedChange={() => handleToggleSecret(secret.id)}
                                 disabled={isTogglingThis}
@@ -510,7 +501,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
                                 <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />
                               )}
                             </div>
-                            
+
                             <Button
                               variant="ghost"
                               size="sm"
@@ -534,7 +525,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
               Close
             </Button>
             {activeTab === 'add' && selectedProvider && (
-              <Button 
+              <Button
                 onClick={handleSaveKey}
                 disabled={!apiKey || !isKeyFormatValid || isSaving}
                 className="gap-2"
@@ -567,7 +558,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDeleteSecret}
               disabled={isDeleting}
               className="bg-red-600 hover:bg-red-700"

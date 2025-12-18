@@ -1,6 +1,7 @@
 import { ToolDefinition, ErrorResult } from '../types';
 import { StructuredLogger } from '../../../logger';
 import { CodingAgentInterface } from 'worker/agents/services/implementations/CodingAgent';
+import { isBackendReadOnlyFile } from 'worker/services/sandbox/utils';
 
 export type RegenerateFileArgs = {
 	path: string;
@@ -22,6 +23,11 @@ export function createRegenerateFileTool(
 			description:
 				`Autonomous AI agent that applies surgical fixes to code files. Takes file path and array of specific issues to fix. Returns diff showing changes made.
 
+CRITICAL RESTRICTIONS:
+- Cannot modify files in api-worker/, worker/, or admin-app/ directories (read-only, auto-deployed)
+- Only files in storefront-app/ can be modified
+- Backend and admin files are available for reading but cannot be written
+
 CRITICAL: Provide detailed, specific issues - not vague descriptions. See system prompt for full usage guide. These would be implemented by an independent LLM AI agent`,
 			parameters: {
 				type: 'object',
@@ -34,6 +40,13 @@ CRITICAL: Provide detailed, specific issues - not vague descriptions. See system
 		},
 		implementation: async ({ path, issues }) => {
 			try {
+				// Validate that file is not in read-only directory
+				if (isBackendReadOnlyFile(path)) {
+					return {
+						error: `Cannot regenerate file in read-only directory: ${path}. Backend (api-worker/), worker routes, and admin dashboard (admin-app/) are read-only and automatically deployed. Only files in storefront-app/ can be modified.`,
+					};
+				}
+
 				logger.info('Regenerating file', {
 					path,
 					issuesCount: issues.length,

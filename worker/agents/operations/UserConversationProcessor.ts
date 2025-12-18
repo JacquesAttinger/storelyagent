@@ -15,9 +15,13 @@ import { PROMPT_UTILS } from "../prompts";
 import { RuntimeError } from "worker/services/sandbox/sandboxTypes";
 import { CodeSerializerType } from "../utils/codeSerializers";
 import { ConversationState } from "../inferutils/common";
+import { InferenceContext } from "../inferutils/config.types";
 import { downloadR2Image, imagesToBase64, imageToBase64 } from "worker/utils/images";
 import { ProcessedImageAttachment } from "worker/types/image-attachment";
 import { AbortError, InferResponseString } from "../inferutils/core";
+import z from "zod";
+import { createSystemMessage } from "../inferutils/common";
+import { createLogger } from "../../logger";
 
 // Constants
 const CHUNK_SIZE = 64;
@@ -77,7 +81,7 @@ const RelevantProjectUpdateWebsoketMessages = [
 ] as const;
 export type ProjectUpdateType = typeof RelevantProjectUpdateWebsoketMessages[number];
 
-const SYSTEM_PROMPT = `You are Orange, the conversational AI interface for Cloudflare's vibe coding platform.
+const SYSTEM_PROMPT = `You are Orange, the conversational AI interface for Storely's vibe coding platform.
 
 ## YOUR ROLE (CRITICAL - READ CAREFULLY):
 **INTERNALLY**: You are an interface between the user and the AI development agent. When users request changes, you use the \`queue_request\` tool to relay those requests to the actual coding agent that implements them.
@@ -276,6 +280,143 @@ Remember: YOU are the developer from the user's perspective. Always speak as "I"
 
 const FALLBACK_USER_RESPONSE = "I understand you'd like to make some changes to your project. I'll work on that in the next phase.";
 
+// Schema for checking if store name and design are provided
+const StoreInfoCheckSchema = z.object({
+    hasStoreName: z.boolean().describe("Whether the user has provided a store name"),
+    hasDesign: z.boolean().describe("Whether the user has provided design preferences or style information"),
+    askFor: z.enum(['name', 'design', 'both', 'skip']).describe("What to ask for: 'name' if only store name is missing, 'design' if only design is missing, 'both' if both are missing, 'skip' if both are provided or not applicable"),
+    reasoning: z.string().describe("Brief reasoning for the decision")
+});
+
+type StoreInfoCheck = z.infer<typeof StoreInfoCheckSchema>;
+
+/**
+ * Check if store name and design are provided in the initial query
+ * This is a standalone function that can be called during initialization
+ */
+export async function checkStoreInfoForInitialQuery(
+    query: string,
+    env: Env,
+    inferenceContext: InferenceContext
+): Promise<StoreInfoCheck> {
+    const logger = createLogger('StoreInfoCheck');
+    
+    const checkPrompt = `Analyze the user's initial prompt to determine if they have provided:
+1. A store name (e.g., "My Store", "TechShop", "Fashion Boutique", "Artisan Crafts", etc.)
+2. Design preferences or style information (e.g., "modern", "minimalist", "vintage", "bold colors", color schemes, design style, aesthetic descriptions, etc.)
+
+User's initial prompt: "${query}"
+
+IMPORTANT: This check is specifically for ecommerce store projects. Only ask for store name and design if the project is clearly an ecommerce store or online shop.
+
+Consider:
+- Store name might be mentioned explicitly (e.g., "I want to name it TechShop") or implied in the project description (e.g., "build a fashion boutique")
+- Design preferences might include style keywords ("modern", "minimalist", "vintage"), color mentions ("blue and white", "warm colors"), or aesthetic descriptions ("elegant", "playful", "sophisticated")
+- If the user has provided both store name AND design preferences, return 'skip'
+- If only store name is missing, return 'name'
+- If only design is missing, return 'design'
+- If both are missing, return 'both'
+- If the project is NOT an ecommerce store (e.g., a calculator app, game, etc.), return 'skip'
+- Be lenient - if there's any reasonable indication of name or design, consider it provided`;
+
+    try {
+        const result = await executeInference({
+            env,
+            messages: [
+                createSystemMessage("You are an assistant that analyzes conversations to determine if store name and design information have been provided."),
+                createUserMessage(checkPrompt)
+            ],
+            agentActionName: "conversationalResponse",
+            schema: StoreInfoCheckSchema,
+            context: inferenceContext,
+        });
+
+        const checkResult = result.object as StoreInfoCheck;
+        logger.info("Store info check result for initial query", checkResult);
+        return checkResult;
+    } catch (error) {
+        logger.error("Error checking store info for initial query", { error });
+        // Default to skip if check fails (safer to not interrupt)
+        return {
+            hasStoreName: true,
+            hasDesign: true,
+            askFor: 'skip',
+            reasoning: "Check failed, defaulting to skip"
+        };
+    }
+}
+
+/**
+ * Check if store name and design are provided in the conversation using LLM
+ * This should only be called for the FIRST user message (right after initial prompt)
+ */
+async function checkStoreInfoProvided(
+    conversationState: ConversationState,
+    currentUserMessage: string,
+    env: Env,
+    options: OperationOptions
+): Promise<StoreInfoCheck | null> {
+    const logger = createLogger('StoreInfoCheck');
+    
+    // Only check for the VERY FIRST user message ever in the conversation
+    // Check both runningHistory and fullHistory to ensure this is truly the first user message
+    const runningHistoryUserCount = conversationState.runningHistory.filter(m => m.role === 'user').length;
+    const fullHistoryUserCount = conversationState.fullHistory.filter(m => m.role === 'user').length;
+    
+    // If there are any user messages in either history, this is not the first message
+    if (runningHistoryUserCount > 0 || fullHistoryUserCount > 0) {
+        logger.info("Skipping store info check - not the first user message", { 
+            runningHistoryUserCount,
+            fullHistoryUserCount 
+        });
+        return null; // Return null to indicate we should skip this check
+    }
+
+    const checkPrompt = `Analyze the user's initial prompt to determine if they have provided:
+1. A store name (e.g., "My Store", "TechShop", "Fashion Boutique", "Artisan Crafts", etc.)
+2. Design preferences or style information (e.g., "modern", "minimalist", "vintage", "bold colors", color schemes, design style, aesthetic descriptions, etc.)
+
+User's initial prompt: "${currentUserMessage}"
+
+IMPORTANT: This check is specifically for ecommerce store projects. Only ask for store name and design if the project is clearly an ecommerce store or online shop.
+
+Consider:
+- Store name might be mentioned explicitly (e.g., "I want to name it TechShop") or implied in the project description (e.g., "build a fashion boutique")
+- Design preferences might include style keywords ("modern", "minimalist", "vintage"), color mentions ("blue and white", "warm colors"), or aesthetic descriptions ("elegant", "playful", "sophisticated")
+- If the user has provided both store name AND design preferences, return 'skip'
+- If only store name is missing, return 'name'
+- If only design is missing, return 'design'
+- If both are missing, return 'both'
+- If the project is NOT an ecommerce store (e.g., a calculator app, game, etc.), return 'skip'
+- Be lenient - if there's any reasonable indication of name or design, consider it provided`;
+
+    try {
+        const result = await executeInference({
+            env,
+            messages: [
+                createSystemMessage("You are an assistant that analyzes conversations to determine if store name and design information have been provided."),
+                createUserMessage(checkPrompt)
+            ],
+            agentActionName: "conversationalResponse",
+            schema: StoreInfoCheckSchema,
+            context: options.inferenceContext,
+        });
+
+        const checkResult = result.object as StoreInfoCheck;
+        logger.info("Store info check result", checkResult);
+        return checkResult;
+    } catch (error) {
+        logger.error("Error checking store info", { error });
+        // Default to skip if check fails (safer to not interrupt)
+        return {
+            hasStoreName: true,
+            hasDesign: true,
+            askFor: 'skip',
+            reasoning: "Check failed, defaulting to skip"
+        };
+    }
+}
+
 const USER_PROMPT = `
 <system_context>
 ## Timestamp:
@@ -343,6 +484,88 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
         });
 
         try {
+            // Check if store name and design are provided (only for the VERY FIRST user message)
+            const storeInfoCheck = await checkStoreInfoProvided(
+                conversationState,
+                userMessage,
+                env,
+                options
+            );
+
+            // If check returned null, skip (not the first message)
+            // Otherwise, check what to ask for
+            if (storeInfoCheck && storeInfoCheck.askFor !== 'skip') {
+                let askResponse = '';
+                
+                if (storeInfoCheck.askFor === 'both') {
+                    askResponse = `Before we continue, I'd like to know a bit more about your store to make it perfect for you:
+
+1. **Store Name**: What would you like to name your store? (e.g., "TechShop", "Fashion Boutique", "Artisan Crafts")
+
+2. **Design Style**: What design aesthetic are you looking for? For example:
+   - Modern and minimalist
+   - Vintage and rustic
+   - Bold and colorful
+   - Elegant and sophisticated
+   - Playful and fun
+   - Or describe your preferred color scheme and visual style
+
+You can provide both now, or we can refine them later. Just let me know what you have in mind!`;
+                } else if (storeInfoCheck.askFor === 'name') {
+                    askResponse = `Before we continue, I'd like to know what you'd like to name your store. (e.g., "TechShop", "Fashion Boutique", "Artisan Crafts")
+
+What would you like to call it?`;
+                } else if (storeInfoCheck.askFor === 'design') {
+                    askResponse = `Before we continue, I'd like to know what design aesthetic you're looking for. For example:
+   - Modern and minimalist
+   - Vintage and rustic
+   - Bold and colorful
+   - Elegant and sophisticated
+   - Playful and fun
+   - Or describe your preferred color scheme and visual style
+
+What design style do you have in mind?`;
+                }
+
+                if (askResponse) {
+                    logger.info("Asking user for store info", { 
+                        askFor: storeInfoCheck.askFor,
+                        checkResult: storeInfoCheck
+                    });
+
+                    // Generate conversation ID for this response
+                    const aiConversationId = IdGenerator.generateConversationId();
+                    inputs.conversationResponseCallback(askResponse, aiConversationId, false);
+
+                    // Save to conversation history
+                    const userMessageForHistory = images && images.length > 0
+                        ? createMultiModalUserMessage(
+                            buildUserMessageWithContext(userMessage, errors, projectUpdates, false),
+                            images.map(img => img.r2Key),
+                            'high'
+                        )
+                        : createUserMessage(buildUserMessageWithContext(userMessage, errors, projectUpdates, false));
+
+                    const assistantResponse = createAssistantMessage(askResponse);
+
+                    const messages = [
+                        {...userMessageForHistory, conversationId: IdGenerator.generateConversationId()},
+                        {...assistantResponse, conversationId: aiConversationId}
+                    ];
+
+                    return {
+                        conversationResponse: {
+                            userResponse: askResponse
+                        },
+                        conversationState: {
+                            ...conversationState,
+                            runningHistory: [...conversationState.runningHistory, ...messages],
+                            fullHistory: [...conversationState.fullHistory, ...messages]
+                        }
+                    };
+                }
+            }
+
             const systemPromptMessages = getSystemPromptWithProjectContext(SYSTEM_PROMPT, context, CodeSerializerType.SIMPLE);
             
             // Create user message with optional images for inference
@@ -365,12 +588,12 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
             const toolCallRenderer = buildToolCallRenderer(inputs.conversationResponseCallback, aiConversationId);
 
             // Assemble all tools with lifecycle callbacks for UI updates
-            const tools = buildTools(
+            const tools = (await buildTools(
                 agent,
                 logger,
                 toolCallRenderer,
                 (chunk: string) => inputs.conversationResponseCallback(chunk, aiConversationId, true)    
-            ).map(td => ({
+            )).map(td => ({
                 ...td,
                 onStart: (args: Record<string, unknown>) => toolCallRenderer({ name: td.function.name, status: 'start', args }),
                 onComplete: (args: Record<string, unknown>, result: unknown) => toolCallRenderer({ 
@@ -440,6 +663,7 @@ export class UserConversationProcessor extends AgentOperation<UserConversationIn
 
             
             // For conversation history, store only text (images are ephemeral and not persisted)
+            // Use original userMessage for history (not the processed one with injected prompt)
             const userPromptForHistory = buildUserMessageWithContext(userMessage, errors, projectUpdates, false);
             const userMessageForHistory = images && images.length > 0
                 ? createMultiModalUserMessage(

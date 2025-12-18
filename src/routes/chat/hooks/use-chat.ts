@@ -2,7 +2,7 @@ import { WebSocket } from 'partysocket';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
-    RateLimitExceededError,
+	RateLimitExceededError,
 	type BlueprintType,
 	type WebSocketMessage,
 	type CodeFixEdits,
@@ -101,15 +101,15 @@ export function useChat({
 	const [isDeploying, setIsDeploying] = useState(false);
 	const [cloudflareDeploymentUrl, setCloudflareDeploymentUrl] = useState<string>('');
 	const [deploymentError, setDeploymentError] = useState<string>();
-	
+
 	// Issue tracking and debugging state
 	const [runtimeErrorCount, setRuntimeErrorCount] = useState(0);
 	const [staticIssueCount, setStaticIssueCount] = useState(0);
 	const [isDebugging, setIsDebugging] = useState(false);
-	
+
 	// Preview deployment state
 	const [isPreviewDeploying, setIsPreviewDeploying] = useState(false);
-	
+
 	// Redeployment state - tracks when redeploy button should be enabled
 	const [isRedeployReady, setIsRedeployReady] = useState(false);
 	// const [lastDeploymentPhaseCount, setLastDeploymentPhaseCount] = useState(0);
@@ -120,12 +120,15 @@ export function useChat({
 	const [isPhaseProgressActive, setIsPhaseProgressActive] = useState(false);
 
 	const [isThinking, setIsThinking] = useState(false);
-	
+
 	// Preview refresh state - triggers preview reload after deployment
 	const [shouldRefreshPreview, setShouldRefreshPreview] = useState(false);
-	
+
 	// Track whether we've completed initial state restoration to avoid disrupting active sessions
 	const [isInitialStateRestored, setIsInitialStateRestored] = useState(false);
+
+	// Track if we're waiting for store info (agent not initialized yet)
+	const [waitingForStoreInfo, setWaitingForStoreInfo] = useState(false);
 
 	const updateStage = useCallback(
 		(stageId: ProjectStage['id'], data: Partial<Omit<ProjectStage, 'id'>>) => {
@@ -190,6 +193,7 @@ export function useChat({
 			setRuntimeErrorCount,
 			setStaticIssueCount,
 			setIsDebugging,
+			setWaitingForStoreInfo,
 			// Current state
 			isInitialStateRestored,
 			blueprint,
@@ -234,7 +238,7 @@ export function useChat({
 			{ disableGenerate = false, isRetry = false }: { disableGenerate?: boolean; isRetry?: boolean } = {},
 		) => {
 			logger.debug(`🔌 ${isRetry ? 'Retrying' : 'Attempting'} WebSocket connection (attempt ${retryCount.current + 1}/${maxRetries + 1}):`, wsUrl);
-			
+
 			if (!wsUrl) {
 				logger.error('❌ WebSocket URL is required');
 				return;
@@ -268,14 +272,14 @@ export function useChat({
 						return;
 					}
 					if (myAttemptId !== connectAttemptIdRef.current) return;
-					
+
 					clearTimeout(connectionTimeout);
 					logger.info('✅ WebSocket connection established successfully!');
 					connectionStatus.current = 'connected';
-					
+
 					// Reset retry count on successful connection
 					retryCount.current = 0;
-					
+
 					// Clear any pending retry timeouts
 					retryTimeouts.current.forEach(clearTimeout);
 					retryTimeouts.current = [];
@@ -292,9 +296,12 @@ export function useChat({
 					sendWebSocketMessage(ws, 'get_conversation_state');
 
 					// Request file generation for new chats only
-					if (!disableGenerate && urlChatId === 'new') {
+					// BUT: Don't send generate_all if we're waiting for store info (agent not initialized yet)
+					if (!disableGenerate && urlChatId === 'new' && !waitingForStoreInfo) {
 						logger.debug('🔄 Starting code generation for new chat');
 						sendWebSocketMessage(ws, 'generate_all');
+					} else if (waitingForStoreInfo) {
+						logger.debug('⏸️ Skipping generate_all - waiting for store info from user');
 					}
 				});
 
@@ -345,11 +352,11 @@ export function useChat({
 	const handleConnectionFailure = useCallback(
 		(wsUrl: string, disableGenerate: boolean, reason: string) => {
 			connectionStatus.current = 'failed';
-			
+
 			if (retryCount.current >= maxRetries) {
 				logger.error(`💥 WebSocket connection failed permanently after ${maxRetries + 1} attempts`);
 				sendMessage(createAIMessage('websocket_failed', `🚨 Connection failed permanently after ${maxRetries + 1} attempts.\n\n❌ Reason: ${reason}\n\n🔄 Please refresh the page to try again.`));
-				
+
 				// Debug logging for permanent failure
 				onDebugMessage?.('error',
 					'WebSocket Connection Failed Permanently',
@@ -360,22 +367,22 @@ export function useChat({
 			}
 
 			retryCount.current++;
-			
+
 			// Exponential backoff: 2^attempt * 1000ms (1s, 2s, 4s, 8s, 16s)
 			const retryDelay = Math.pow(2, retryCount.current) * 1000;
 			const maxDelay = 30000; // Cap at 30 seconds
 			const actualDelay = Math.min(retryDelay, maxDelay);
 
 			logger.warn(`🔄 Retrying WebSocket connection in ${actualDelay / 1000}s (attempt ${retryCount.current + 1}/${maxRetries + 1})`);
-			
+
 			sendMessage(createAIMessage('websocket_retrying', `🔄 Connection failed. Retrying in ${Math.ceil(actualDelay / 1000)} seconds... (attempt ${retryCount.current + 1}/${maxRetries + 1})\n\n❌ Reason: ${reason}`, true));
 
 			const timeoutId = setTimeout(() => {
 				connectWithRetry(wsUrl, { disableGenerate, isRetry: true });
 			}, actualDelay);
-			
+
 			retryTimeouts.current.push(timeoutId);
-			
+
 			// Debug logging for retry attempt
 			onDebugMessage?.('warning',
 				'WebSocket Connection Retry',
@@ -386,7 +393,7 @@ export function useChat({
 		[maxRetries, retryCount, retryTimeouts, onDebugMessage, sendMessage],
 	);
 
-    // No legacy wrapper; call connectWithRetry directly
+	// No legacy wrapper; call connectWithRetry directly
 
 	useEffect(() => {
 		async function init() {
@@ -425,16 +432,37 @@ export function useChat({
 					};
 
 					let startedBlueprintStream = false;
-					sendMessage(createAIMessage('main', "Sure, let's get started. Bootstrapping the project first...", true));
+					let receivedStoreInfoPending = false;
+
+					// Don't show bootstrap message yet - wait to see if we need store info first
+					// sendMessage(createAIMessage('main', "Sure, let's get started. Bootstrapping the project first...", true));
 
 					for await (const obj of ndjsonStream(response.stream)) {
-                        logger.debug('Received chunk from server:', obj);
+						logger.debug('Received chunk from server:', obj);
+
+						// Check if server indicates store info is pending
+						// The actual store info request will come via WebSocket as a normal CONVERSATION_RESPONSE
+						if (obj.storeInfoPending) {
+							logger.info('Store info pending, waiting for WebSocket message');
+							receivedStoreInfoPending = true;
+							setWaitingForStoreInfo(true);
+							// Reset bootstrap state since we're not actually bootstrapping yet
+							setIsBootstrapping(false);
+							// Reset project stages to pending - we haven't started yet
+							setProjectStages(defaultStages.map(stage => ({ ...stage, status: 'pending' as const })));
+							// Don't continue - we still need to process agentId and websocketUrl from this message
+						}
+
 						if (obj.chunk) {
+							// If we get here, we're actually generating blueprint
+							// Show bootstrap message if we haven't shown it yet
 							if (!startedBlueprintStream) {
+								sendMessage(createAIMessage('main', "Sure, let's get started. Bootstrapping the project first...", true));
 								sendMessage(createAIMessage('main', 'Blueprint is being generated...', true));
 								logger.info('Blueprint stream has started');
 								setIsBootstrapping(false);
 								setIsGeneratingBlueprint(true);
+								setWaitingForStoreInfo(false); // No longer waiting - blueprint generation has started
 								startedBlueprintStream = true;
 								updateStage('bootstrap', { status: 'completed' });
 								updateStage('blueprint', { status: 'active' });
@@ -446,7 +474,7 @@ export function useChat({
 							} catch (e) {
 								logger.error('Error parsing JSON:', e, obj.chunk);
 							}
-						} 
+						}
 						if (obj.agentId) {
 							result.agentId = obj.agentId;
 						}
@@ -455,7 +483,7 @@ export function useChat({
 							logger.debug('📡 Received WebSocket URL from server:', result.websocketUrl)
 						}
 						if (obj.template) {
-                            logger.debug('Received template from server:', obj.template);
+							logger.debug('Received template from server:', obj.template);
 							result.template = obj.template;
 							if (obj.template.files) {
 								loadBootstrapFiles(obj.template.files);
@@ -463,15 +491,30 @@ export function useChat({
 						}
 					}
 
-					updateStage('blueprint', { status: 'completed' });
-					setIsGeneratingBlueprint(false);
-					sendMessage(createAIMessage('main', 'Blueprint generation complete. Now starting the code generation...', true));
+					// Only show blueprint completion if we actually started blueprint generation
+					// If we're waiting for store info, connect to WebSocket and wait for user input
+					if (startedBlueprintStream && !receivedStoreInfoPending) {
+						updateStage('blueprint', { status: 'completed' });
+						setIsGeneratingBlueprint(false);
+						sendMessage(createAIMessage('main', 'Blueprint generation complete. Now starting the code generation...', true));
+					} else if (receivedStoreInfoPending) {
+						// We're waiting for store info, don't show blueprint completion
+						// The store info request will come via WebSocket as a normal CONVERSATION_RESPONSE
+						logger.info('Waiting for store info from user, connecting to WebSocket');
+						// Still need to connect to WebSocket so user can respond
+						if (result.websocketUrl && result.agentId) {
+							logger.debug('connecting to ws for store info response');
+							connectWithRetry(result.websocketUrl);
+							setChatId(result.agentId);
+						}
+						return; // Don't proceed with normal flow - we're waiting for user input
+					}
 
 					// Connect to WebSocket
 					logger.debug('connecting to ws with created id');
 					connectWithRetry(result.websocketUrl);
 					setChatId(result.agentId); // This comes from the server response
-					
+
 					// Emit app-created event for sidebar updates
 					appEvents.emitAppCreated(result.agentId, {
 						title: userQuery || 'New App',
@@ -512,22 +555,22 @@ export function useChat({
 		init();
 	}, []);
 
-    // Mount/unmount: enable/disable reconnection and clear pending retries
-    useEffect(() => {
-        shouldReconnectRef.current = true;
-        return () => {
-            shouldReconnectRef.current = false;
-            retryTimeouts.current.forEach(clearTimeout);
-            retryTimeouts.current = [];
-        };
-    }, []);
+	// Mount/unmount: enable/disable reconnection and clear pending retries
+	useEffect(() => {
+		shouldReconnectRef.current = true;
+		return () => {
+			shouldReconnectRef.current = false;
+			retryTimeouts.current.forEach(clearTimeout);
+			retryTimeouts.current = [];
+		};
+	}, []);
 
-    // Close previous websocket on change
-    useEffect(() => {
-        return () => {
-            websocket?.close();
-        };
-    }, [websocket]);
+	// Close previous websocket on change
+	useEffect(() => {
+		return () => {
+			websocket?.close();
+		};
+	}, [websocket]);
 
 	useEffect(() => {
 		if (edit) {
@@ -550,9 +593,9 @@ export function useChat({
 
 	// Track debugging state based on deep_debug tool events in messages
 	useEffect(() => {
-		const hasActiveDebug = messages.some(msg => 
-			msg.role === 'assistant' && 
-			msg.ui?.toolEvents?.some(event => 
+		const hasActiveDebug = messages.some(msg =>
+			msg.role === 'assistant' &&
+			msg.ui?.toolEvents?.some(event =>
 				event.name === 'deep_debug' && event.status === 'start'
 			)
 		);
@@ -573,46 +616,46 @@ export function useChat({
 			// Send deployment command via WebSocket instead of HTTP request
 			if (sendWebSocketMessage(websocket, 'deploy', { instanceId })) {
 				logger.debug('🚀 Deployment WebSocket message sent:', instanceId);
-				
+
 				// Set 1-minute timeout for deployment
 				setTimeout(() => {
 					if (isDeploying) {
 						logger.warn('⏰ Deployment timeout after 1 minute');
-						
+
 						// Reset deployment state
 						setIsDeploying(false);
 						setCloudflareDeploymentUrl('');
 						setIsRedeployReady(false);
-						
+
 						// Show timeout message
 						sendMessage(createAIMessage('deployment_timeout', `⏰ Deployment timed out after 1 minute.\n\n🔄 Please try deploying again. The server may be busy.`));
-						
+
 						// Debug logging for timeout
-						onDebugMessage?.('warning', 
+						onDebugMessage?.('warning',
 							'Deployment Timeout',
 							`Deployment for ${instanceId} timed out after 60 seconds`,
 							'Deployment Timeout Management'
 						);
 					}
 				}, 60000); // 1 minute = 60,000ms
-				
+
 				// Store timeout ID for cleanup if deployment completes early
 				// Note: In a real implementation, you'd want to clear this timeout
 				// when deployment completes successfully
-				
+
 			} else {
 				throw new Error('WebSocket connection not available');
 			}
 		} catch (error) {
 			logger.error('❌ Error sending deployment WebSocket message:', error);
-			
+
 			// Set deployment state immediately for UI feedback
 			setIsDeploying(true);
 			// Clear any previous deployment error
 			setDeploymentError('');
 			setCloudflareDeploymentUrl('');
 			setIsRedeployReady(false);
-			
+
 			sendMessage(createAIMessage('deployment_error', `❌ Failed to initiate deployment: ${error instanceof Error ? error.message : 'Unknown error'}\n\n🔄 You can try again.`));
 		}
 	}, [websocket, sendMessage, isDeploying, onDebugMessage]);
@@ -637,6 +680,7 @@ export function useChat({
 		phaseTimeline,
 		isThinking,
 		onCompleteBootstrap,
+		waitingForStoreInfo,
 		// Deployment and generation control
 		isDeploying,
 		cloudflareDeploymentUrl,

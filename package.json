@@ -34,6 +34,7 @@
 		"knip:exports": "knip --exports"
 	},
 	"dependencies": {
+		"@anthropic-ai/sdk": "^0.71.2",
 		"@ashishkumar472/cf-git": "1.0.5",
 		"@cloudflare/containers": "^0.0.28",
 		"@cloudflare/sandbox": "0.4.14",

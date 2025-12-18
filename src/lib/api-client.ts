@@ -4,7 +4,7 @@
  * Features 401 response interception to trigger authentication modals
  */
 
-import type{
+import type {
 	ApiResponse,
 	AppsListData,
 	PublicAppsData,
@@ -42,6 +42,18 @@ import type{
 	SecretStoreData,
 	SecretDeleteData,
 	SecretTemplatesData,
+	StripeConnectStatusData,
+	StripeConnectInitiateData,
+	StripeConnectDashboardData,
+	StripeConnectDisconnectData,
+	DomainCheckData,
+	DomainPurchaseUrlData,
+	UserDomainsListData,
+	DomainLinkData,
+	DomainDeleteData,
+	DomainCreateData,
+	SubdomainCheckData,
+	SubdomainUpdateData,
 	AgentConnectionData,
 	AgentStreamingResponse,
 	App,
@@ -53,16 +65,16 @@ import type{
 	AuthProvidersResponseData,
 	CsrfTokenResponseData,
 	OAuthProvider,
-    CodeGenArgs,
-    AgentPreviewResponse,
-    PlatformStatusData,
-    RateLimitError
+	CodeGenArgs,
+	AgentPreviewResponse,
+	PlatformStatusData,
+	RateLimitError
 } from '@/api-types';
 import {
-    
-    RateLimitExceededError,
-    SecurityError,
-    SecurityErrorType,
+
+	RateLimitExceededError,
+	SecurityError,
+	SecurityErrorType,
 } from '@/api-types';
 import { toast } from 'sonner';
 
@@ -192,7 +204,7 @@ class ApiClient {
 				method: 'GET',
 				credentials: 'include',
 			});
-			
+
 			if (response.ok) {
 				const data: ApiResponse<CsrfTokenResponseData> = await response.json();
 				if (data.data?.token) {
@@ -235,12 +247,12 @@ class ApiClient {
 		if (!['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())) {
 			return true;
 		}
-		
+
 		// Fetch new token if none exists or current one is expired
 		if (!this.csrfTokenInfo || this.isCSRFTokenExpired()) {
 			return await this.fetchCsrfToken();
 		}
-		
+
 		return true;
 	}
 
@@ -289,7 +301,7 @@ class ApiClient {
 	private async request<T>(
 		endpoint: string,
 		options: RequestOptions = {},
-        noToast: boolean = false,
+		noToast: boolean = false,
 	): Promise<ApiResponse<T>> {
 		const { data } = await this.requestRaw<T>(endpoint, options, false, noToast);
 		if (!data) {
@@ -307,10 +319,10 @@ class ApiClient {
 		endpoint: string,
 		options: RequestOptions = {},
 		isRetry: boolean = false,
-        noToast: boolean = false,
+		noToast: boolean = false,
 	): Promise<{ response: Response; data: ApiResponse<T> | null }> {
 		this.ensureSessionToken();
-		
+
 		if (!await this.ensureCsrfToken(options.method || 'GET')) {
 			throw new ApiError(
 				500,
@@ -340,61 +352,61 @@ class ApiClient {
 
 		try {
 			const response = await fetch(url, config);
-			
+
 			// For streaming responses, skip JSON parsing if response is ok
 			if (options.skipJsonParsing && response.ok) {
 				return { response, data: null };
 			}
-			
+
 			const data = await response.json() as ApiResponse<T>;
 
 			if (!response.ok) {
-                if (
-                    response.status === 401 &&
-                    globalAuthModalTrigger &&
-                    this.shouldTriggerAuthModal(endpoint)
-                ) {
-                    const authContext = this.getAuthContextForEndpoint(endpoint);
-                    globalAuthModalTrigger(authContext);
-                }
+				if (
+					response.status === 401 &&
+					globalAuthModalTrigger &&
+					this.shouldTriggerAuthModal(endpoint)
+				) {
+					const authContext = this.getAuthContextForEndpoint(endpoint);
+					globalAuthModalTrigger(authContext);
+				}
 
-                const errorData = data.error;
-                if (errorData && errorData.type) {
-                       // Send a toast notification for typed errors
-                    if (!noToast) {
-                        toast.error(errorData.message);
-                    }
-                    switch (errorData.type) {
-                        case SecurityErrorType.CSRF_VIOLATION:
-                            // Handle CSRF failures with retry
-                            if (response.status === 403 && !isRetry) {
-                                // Clear expired token and retry with fresh one
-                                this.csrfTokenInfo = null;
-                                return this.requestRaw(endpoint, options, true);
-                            }
-                            break;
-                        case SecurityErrorType.RATE_LIMITED:
-                            // Handle rate limiting
-                            console.log('Rate limited', errorData);
-                            throw RateLimitExceededError.fromRateLimitError(errorData as unknown as RateLimitError);
-                        default:
-                            // Security error
-                            throw new SecurityError(errorData.type, errorData.message);
-                        }
-                    }
-                    console.log("Came here");
+				const errorData = data.error;
+				if (errorData && errorData.type) {
+					// Send a toast notification for typed errors
+					if (!noToast) {
+						toast.error(errorData.message);
+					}
+					switch (errorData.type) {
+						case SecurityErrorType.CSRF_VIOLATION:
+							// Handle CSRF failures with retry
+							if (response.status === 403 && !isRetry) {
+								// Clear expired token and retry with fresh one
+								this.csrfTokenInfo = null;
+								return this.requestRaw(endpoint, options, true);
+							}
+							break;
+						case SecurityErrorType.RATE_LIMITED:
+							// Handle rate limiting
+							console.log('Rate limited', errorData);
+							throw RateLimitExceededError.fromRateLimitError(errorData as unknown as RateLimitError);
+						default:
+							// Security error
+							throw new SecurityError(errorData.type, errorData.message);
+					}
+				}
+				console.log("Came here");
 
-                    throw new ApiError(
-                        response.status,
-                        response.statusText,
-                        data.error?.message || data.message || 'Request failed',
-                        endpoint,
-                    );
+				throw new ApiError(
+					response.status,
+					response.statusText,
+					data.error?.message || data.message || 'Request failed',
+					endpoint,
+				);
 			}
 
-		    return { response, data };
+			return { response, data };
 		} catch (error) {
-            console.error(error);
+			console.error(error);
 			if (error instanceof ApiError || error instanceof RateLimitExceededError || error instanceof SecurityError) {
 				throw error;
 			}
@@ -545,7 +557,7 @@ class ApiClient {
 	// /**
 	//  * Fork an app
 	//  */
-    // DISABLED: Has been disabled for initial alpha release, for security reasons
+	// DISABLED: Has been disabled for initial alpha release, for security reasons
 	// async forkApp(appId: string): Promise<ApiResponse<ForkAppData>> {
 	// 	return this.request<ForkAppData>(`/api/apps/${appId}/fork`, {
 	// 		method: 'POST',
@@ -586,14 +598,14 @@ class ApiClient {
 				body: args,
 				skipJsonParsing: true, // Don't parse JSON for streaming response
 			});
-			
+
 			// Check if response is ok
 			if (!response.ok) {
 				// Parse error response if available
 				const errorMessage = data?.error?.message || `Agent creation failed with status: ${response.status}`;
 				throw new Error(errorMessage);
 			}
-			
+
 			return {
 				success: true,
 				stream: response
@@ -602,8 +614,8 @@ class ApiClient {
 			// Handle any network or parsing errors
 			const errorMessage = error instanceof Error ? error.message : 'Failed to create agent session';
 			toast.error(errorMessage);
-			
-            throw new Error(errorMessage);
+
+			throw new Error(errorMessage);
 		}
 	}
 
@@ -928,6 +940,51 @@ class ApiClient {
 		return this.request<SecretTemplatesData>('/api/secrets/templates');
 	}
 
+	// ===============================
+	// Stripe Connect API Methods
+	// ===============================
+
+	/**
+	 * Get Stripe Connect status for the current user
+	 */
+	async getStripeConnectStatus(): Promise<ApiResponse<StripeConnectStatusData>> {
+		return this.request<StripeConnectStatusData>('/api/stripe/connect/status');
+	}
+
+	/**
+	 * Initiate Stripe Connect onboarding - returns URL to redirect user to
+	 */
+	async initiateStripeConnect(): Promise<ApiResponse<StripeConnectInitiateData>> {
+		return this.request<StripeConnectInitiateData>('/api/stripe/connect/initiate', {
+			method: 'POST',
+		});
+	}
+
+	/**
+	 * Refresh Stripe Connect status after returning from Stripe onboarding
+	 */
+	async refreshStripeConnectStatus(): Promise<ApiResponse<StripeConnectStatusData>> {
+		return this.request<StripeConnectStatusData>('/api/stripe/connect/refresh', {
+			method: 'POST',
+		});
+	}
+
+	/**
+	 * Get Express Dashboard link for connected Stripe account
+	 */
+	async getStripeDashboardLink(): Promise<ApiResponse<StripeConnectDashboardData>> {
+		return this.request<StripeConnectDashboardData>('/api/stripe/connect/dashboard');
+	}
+
+	/**
+	 * Disconnect Stripe account
+	 */
+	async disconnectStripe(): Promise<ApiResponse<StripeConnectDisconnectData>> {
+		return this.request<StripeConnectDisconnectData>('/api/stripe/connect', {
+			method: 'DELETE',
+		});
+	}
+
 	/**
 	 * Initiate GitHub OAuth authorization for user repository access
 	 * This redirects to GitHub OAuth
@@ -946,7 +1003,7 @@ class ApiClient {
 		description?: string;
 		isPrivate?: boolean;
 		agentId: string;
-	}): Promise<ApiResponse<{ 
+	}): Promise<ApiResponse<{
 		authUrl?: string;
 		success?: boolean;
 		repositoryUrl?: string;
@@ -1185,6 +1242,90 @@ class ApiClient {
 
 		// Redirect to OAuth provider
 		window.location.href = oauthUrl.toString();
+	}
+
+	// ===============================
+	// Domain API Methods
+	// ===============================
+
+	/**
+	 * Check domain availability
+	 */
+	async checkDomainAvailability(domain: string): Promise<ApiResponse<DomainCheckData>> {
+		return this.request<DomainCheckData>(`/api/domain/check?domain=${encodeURIComponent(domain)}`);
+	}
+
+	/**
+	 * Get Namecheap purchase URL for a domain
+	 */
+	async getDomainPurchaseUrl(domain: string): Promise<ApiResponse<DomainPurchaseUrlData>> {
+		return this.request<DomainPurchaseUrlData>(`/api/domain/purchase-url?domain=${encodeURIComponent(domain)}`);
+	}
+
+	/**
+	 * Get user's domains
+	 */
+	async getUserDomains(): Promise<ApiResponse<UserDomainsListData>> {
+		return this.request<UserDomainsListData>('/api/domain/mine');
+	}
+
+	/**
+	 * Add a domain (after purchasing on Namecheap)
+	 */
+	async addDomain(domain: string, appId?: string): Promise<ApiResponse<DomainCreateData>> {
+		return this.request<DomainCreateData>('/api/domain', {
+			method: 'POST',
+			body: { domain, appId },
+		});
+	}
+
+	/**
+	 * Link domain to a store
+	 */
+	async linkDomainToStore(domainId: string, appId: string): Promise<ApiResponse<DomainLinkData>> {
+		return this.request<DomainLinkData>(`/api/domain/${domainId}/link`, {
+			method: 'POST',
+			body: { appId },
+		});
+	}
+
+	/**
+	 * Unlink domain from store
+	 */
+	async unlinkDomainFromStore(domainId: string): Promise<ApiResponse<DomainLinkData>> {
+		return this.request<DomainLinkData>(`/api/domain/${domainId}/link`, {
+			method: 'DELETE',
+		});
+	}
+
+	/**
+	 * Delete a domain
+	 */
+	async deleteDomain(domainId: string): Promise<ApiResponse<DomainDeleteData>> {
+		return this.request<DomainDeleteData>(`/api/domain/${domainId}`, {
+			method: 'DELETE',
+		});
+	}
+
+	// ===============================
+	// Subdomain (storelyshop.com) API Methods
+	// ===============================
+
+	/**
+	 * Check subdomain availability
+	 */
+	async checkSubdomainAvailability(subdomain: string): Promise<ApiResponse<SubdomainCheckData>> {
+		return this.request<SubdomainCheckData>(`/api/domain/subdomain/check?subdomain=${encodeURIComponent(subdomain)}`);
+	}
+
+	/**
+	 * Update app subdomain
+	 */
+	async updateAppSubdomain(appId: string, subdomain: string): Promise<ApiResponse<SubdomainUpdateData>> {
+		return this.request<SubdomainUpdateData>(`/api/domain/subdomain/${appId}`, {
+			method: 'POST',
+			body: { subdomain },
+		});
 	}
 }
 

@@ -1,5 +1,5 @@
 import type { ToolDefinition } from './types';
-import { StructuredLogger } from '../../logger';
+import { StructuredLogger, createLogger } from '../../logger';
 import { RenderToolCall } from '../operations/UserConversationProcessor';
 import { toolWebSearchDefinition } from './toolkit/web-search';
 import { toolFeedbackDefinition } from './toolkit/feedback';
@@ -21,6 +21,9 @@ import { createGetRuntimeErrorsTool } from './toolkit/get-runtime-errors';
 import { createWaitForGenerationTool } from './toolkit/wait-for-generation';
 import { createWaitForDebugTool } from './toolkit/wait-for-debug';
 import { createGitTool } from './toolkit/git';
+import { mcpManager } from './mcpManager';
+
+const buildToolsLogger = createLogger('buildTools');
 
 export async function executeToolWithDefinition<TArgs, TResult>(
     toolDef: ToolDefinition<TArgs, TResult>,
@@ -36,12 +39,41 @@ export async function executeToolWithDefinition<TArgs, TResult>(
  * Build all available tools for the agent
  * Add new tools here - they're automatically included in the conversation
  */
-export function buildTools(
+export async function buildTools(
     agent: CodingAgentInterface,
     logger: StructuredLogger,
     toolRenderer: RenderToolCall,
     streamCb: (chunk: string) => void,
-): ToolDefinition<any, any>[] {
+): Promise<ToolDefinition<any, any>[]> {
+    // Initialize MCP manager early to show logs and connect to available servers
+    // This happens when tools are built (before inference)
+    // We await it here so tool names are visible in logs before LLM calls
+    buildToolsLogger.info('========================================');
+    buildToolsLogger.info('Building tools and initializing MCP manager...');
+    buildToolsLogger.info('========================================');
+    logger.info('Building tools and initializing MCP manager...');
+    
+    // Initialize MCP manager (await to ensure tools are discovered before LLM calls)
+    try {
+        await mcpManager.initialize();
+        buildToolsLogger.info('MCP manager initialization completed');
+        logger.info('MCP manager initialization completed');
+        
+        // Log available MCP tools for visibility
+        const availableTools = mcpManager.getAvailableToolNames();
+        if (availableTools.length > 0) {
+            buildToolsLogger.info(`[MCP] Available MCP tools: ${availableTools.join(', ')}`);
+            logger.info(`[MCP] Available MCP tools: ${availableTools.join(', ')}`);
+        }
+    } catch (error) {
+        buildToolsLogger.warn('MCP manager initialization failed (non-critical)', { 
+            error: error instanceof Error ? error.message : String(error) 
+        });
+        logger.warn('MCP manager initialization failed (non-critical)', { 
+            error: error instanceof Error ? error.message : String(error) 
+        });
+    }
+    
     return [
         toolWebSearchDefinition,
         toolFeedbackDefinition,

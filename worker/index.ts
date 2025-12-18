@@ -44,16 +44,48 @@ function setOriginControl(env: Env, request: Request, currentHeaders: Headers): 
 async function handleUserAppRequest(request: Request, env: Env): Promise<Response> {
 	const url = new URL(request.url);
 	const { hostname } = url;
-	logger.info(`Handling user app request for: ${hostname}`);
+	const origin = request.headers.get('Origin');
+	const requestMethod = request.method;
+	
+	logger.info(`[PreviewRequest] ${requestMethod} ${hostname}${url.pathname} | Origin: ${origin || 'none'}`);
+
+	// Handle CORS preflight requests for preview availability checks
+	if (requestMethod === 'OPTIONS') {
+		const isAllowed = origin ? isOriginAllowed(env, origin) : false;
+		logger.info(`[PreviewCORS] OPTIONS preflight | Origin: ${origin} | Allowed: ${isAllowed}`);
+		
+		if (origin && isAllowed) {
+			logger.info(`[PreviewCORS] Returning 204 with CORS headers for origin: ${origin}`);
+			return new Response(null, {
+				status: 204,
+				headers: {
+					'Access-Control-Allow-Origin': origin,
+					'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
+					'Access-Control-Allow-Headers': 'Content-Type',
+					'Access-Control-Expose-Headers': 'X-Preview-Type',
+					'Access-Control-Max-Age': '86400',
+				},
+			});
+		}
+		logger.warn(`[PreviewCORS] Rejecting OPTIONS - origin not allowed: ${origin}`);
+		return new Response(null, { status: 403 });
+	}
+
+	// Log HEAD requests specifically (used by preview availability check)
+	if (requestMethod === 'HEAD') {
+		logger.info(`[PreviewCheck] HEAD request for availability check | Host: ${hostname} | Origin: ${origin}`);
+	}
 
 	// 1. Attempt to proxy to a live development sandbox.
 	// proxyToSandbox doesn't consume the request body on a miss, so no clone is needed here.
 	const sandboxResponse = await proxyToSandbox(request, env);
 	if (sandboxResponse) {
-		logger.info(`Serving response from sandbox for: ${hostname}`);
+		const previewType = sandboxResponse.status === 500 ? 'sandbox-error' : 'sandbox';
+		logger.info(`[PreviewResponse] Sandbox hit | Host: ${hostname} | Status: ${sandboxResponse.status} | Type: ${previewType}`);
+		
         // If it was a websocket upgrade, we need to return the response as is
         if (sandboxResponse.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
-            logger.info(`Serving websocket response from sandbox for: ${hostname}`);
+            logger.info(`[PreviewResponse] WebSocket upgrade for: ${hostname}`);
             return sandboxResponse;
         }
 		
@@ -65,9 +97,13 @@ async function handleUserAppRequest(request: Request, env: Env): Promise<Respons
         } else {
             headers.set('X-Preview-Type', 'sandbox');
         }
+        
+        const originAllowed = origin ? isOriginAllowed(env, origin) : false;
         headers = setOriginControl(env, request, headers);
         headers.append('Vary', 'Origin');
 		headers.set('Access-Control-Expose-Headers', 'X-Preview-Type');
+		
+		logger.info(`[PreviewResponse] Returning sandbox response | CORS Origin Set: ${originAllowed ? origin : 'none'} | Headers: X-Preview-Type=${previewType}`);
 		
 		return new Response(sandboxResponse.body, {
 			status: sandboxResponse.status,
@@ -77,9 +113,9 @@ async function handleUserAppRequest(request: Request, env: Env): Promise<Respons
 	}
 
 	// 2. If sandbox misses, attempt to dispatch to a deployed worker.
-	logger.info(`Sandbox miss for ${hostname}, attempting dispatch to permanent worker.`);
+	logger.info(`[PreviewResponse] Sandbox miss for ${hostname}, attempting dispatch to permanent worker`);
 	if (!isDispatcherAvailable(env)) {
-		logger.warn(`Dispatcher not available, cannot serve: ${hostname}`);
+		logger.warn(`[PreviewResponse] Dispatcher not available for: ${hostname}`);
 		return new Response('This application is not currently available.', { status: 404 });
 	}
 
@@ -88,16 +124,22 @@ async function handleUserAppRequest(request: Request, env: Env): Promise<Respons
 	const dispatcher = env['DISPATCHER'];
 
 	try {
+		logger.info(`[PreviewDispatcher] Dispatching to worker: ${appName}`);
 		const worker = dispatcher.get(appName);
 		const dispatcherResponse = await worker.fetch(request);
+		
+		logger.info(`[PreviewDispatcher] Response from worker ${appName} | Status: ${dispatcherResponse.status}`);
 		
 		// Add headers to identify this as a dispatcher response
 		let headers = new Headers(dispatcherResponse.headers);
 		
 		headers.set('X-Preview-Type', 'dispatcher');
+		const originAllowed = origin ? isOriginAllowed(env, origin) : false;
         headers = setOriginControl(env, request, headers);
         headers.append('Vary', 'Origin');
 		headers.set('Access-Control-Expose-Headers', 'X-Preview-Type');
+		
+		logger.info(`[PreviewDispatcher] Returning dispatcher response | CORS Origin Set: ${originAllowed ? origin : 'none'}`);
 		
 		return new Response(dispatcherResponse.body, {
 			status: dispatcherResponse.status,
@@ -106,7 +148,13 @@ async function handleUserAppRequest(request: Request, env: Env): Promise<Respons
 		});
 	} catch (error: any) {
 		// This block catches errors if the binding doesn't exist or if worker.fetch() fails.
-		logger.warn(`Error dispatching to worker '${appName}': ${error.message}`);
+		logger.error(`[PreviewDispatcher] Error dispatching to worker '${appName}': ${error.message}`, { 
+			hostname, 
+			appName, 
+			method: requestMethod,
+			origin,
+			error: error.stack || error.message 
+		});
 		return new Response('An error occurred while loading this application.', { status: 500 });
 	}
 }

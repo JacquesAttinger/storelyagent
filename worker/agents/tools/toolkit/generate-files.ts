@@ -2,6 +2,7 @@ import { ToolDefinition, ErrorResult } from '../types';
 import { StructuredLogger } from '../../../logger';
 import { CodingAgentInterface } from 'worker/agents/services/implementations/CodingAgent';
 import { FileConceptType } from 'worker/agents/schemas';
+import { isBackendReadOnlyFile } from 'worker/services/sandbox/utils';
 
 export type GenerateFilesArgs = {
 	phase_name: string;
@@ -32,6 +33,11 @@ Use this when:
 - regenerate_file failed (file too broken to patch)
 - Need multiple coordinated files for a feature
 - Scaffolding new components/utilities
+
+CRITICAL RESTRICTIONS:
+- Cannot modify files in api-worker/, worker/, or admin-app/ directories (read-only, auto-deployed)
+- Only files in storefront-app/ can be modified
+- Backend and admin files are available for reading but cannot be written
 
 The system will:
 1. Automatically determine which files to create based on requirements
@@ -77,6 +83,15 @@ Provide detailed, specific requirements. The more detail, the better the results
 		},
 		implementation: async ({ phase_name, phase_description, requirements, files }) => {
 			try {
+				// Validate that no files are in read-only directories
+				const readOnlyFiles = files.filter(f => isBackendReadOnlyFile(f.path));
+				if (readOnlyFiles.length > 0) {
+					const readOnlyPaths = readOnlyFiles.map(f => f.path).join(', ');
+					return {
+						error: `Cannot generate files in read-only directories: ${readOnlyPaths}. Backend (api-worker/), worker routes, and admin dashboard (admin-app/) are read-only and automatically deployed. Only files in storefront-app/ can be modified.`,
+					};
+				}
+
 				logger.info('Generating files via phase implementation', {
 					phase_name,
 					requirementsCount: requirements.length,

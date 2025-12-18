@@ -1,8 +1,16 @@
 import { ChatCompletionFunctionTool } from 'openai/resources';
-export interface MCPServerConfig {
+
+// SSE-based MCP server (remote, accessible via URL)
+export interface MCPSSEServerConfig {
 	name: string;
+	type: 'sse';
 	sseUrl: string;
 }
+
+export type MCPServerConfig = MCPSSEServerConfig;
+
+// Legacy alias for backwards compatibility
+export type MCPSSEConfig = MCPSSEServerConfig;
 export interface MCPResult {
 	content: string;
 }

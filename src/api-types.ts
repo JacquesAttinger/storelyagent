@@ -23,9 +23,9 @@ export type {
 } from 'worker/database/types';
 
 // App-related API Types
-export type { 
+export type {
   AppsListData,
-  PublicAppsData, 
+  PublicAppsData,
   SingleAppData,
   FavoriteToggleData,
   CreateAppData,
@@ -106,20 +106,41 @@ export type {
   SecretTemplatesData
 } from 'worker/api/controllers/secrets/types';
 
+// Stripe Connect API Types
+export type {
+  StripeConnectStatusData,
+  StripeConnectInitiateData,
+  StripeConnectDashboardData,
+  StripeConnectDisconnectData,
+} from 'worker/api/controllers/stripe/types';
+
+// Domain API Types
+export type {
+  DomainCheckData,
+  DomainPurchaseUrlData,
+  UserDomainsListData,
+  DomainLinkData,
+  DomainDeleteData,
+  DomainCreateData,
+  UserDomainData,
+  SubdomainCheckData,
+  SubdomainUpdateData,
+} from 'worker/api/controllers/domain/types';
+
 // Agent/CodeGen API Types  
 export type {
   AgentConnectionData,
 } from 'worker/api/controllers/agent/types';
 
 // WebSocket Types
-export type { 
-  WebSocketMessage, 
+export type {
+  WebSocketMessage,
   WebSocketMessageData,
-  CodeFixEdits 
+  CodeFixEdits
 } from 'worker/api/websocketTypes';
 
 // Database/Schema Types commonly used in frontend
-export type { 
+export type {
   App,
   User,
   UserModelConfig,
@@ -136,28 +157,28 @@ export type {
 } from 'worker/database/types';
 
 // Agent/Generator Types
-export type { 
+export type {
   Blueprint as BlueprintType,
   CodeReviewOutputType,
   FileConceptType,
   FileOutputType as GeneratedFile,
 } from 'worker/agents/schemas';
 
-export type { 
-  CodeGenState 
+export type {
+  CodeGenState
 } from 'worker/agents/core/state';
 
 export type {
   ConversationMessage,
 } from 'worker/agents/inferutils/common';
 
-export type { 
+export type {
   RuntimeError,
-  StaticAnalysisResponse 
+  StaticAnalysisResponse
 } from 'worker/services/sandbox/sandboxTypes';
 
 // Config/Inference Types
-export type { 
+export type {
   AgentActionKey,
   AgentConfig,
   ModelConfig,
@@ -176,13 +197,13 @@ export type ModelSelectionMode = 'platform' | 'byok' | 'custom';
 
 // Match chat FileType interface
 export interface FileType {
-	filePath: string;
-	fileContents: string;
-	explanation?: string;
-	isGenerating?: boolean;
-	needsFixing?: boolean;
-	hasErrors?: boolean;
-	language?: string;
+  filePath: string;
+  fileContents: string;
+  explanation?: string;
+  isGenerating?: boolean;
+  needsFixing?: boolean;
+  hasErrors?: boolean;
+  language?: string;
 }
 
 // Streaming response wrapper types for agent session creation
@@ -194,23 +215,23 @@ export interface StreamingResponse {
 export type AgentStreamingResponse = StreamingResponse;
 
 export {
-	type ImageAttachment, 
-	isSupportedImageType, 
-	MAX_IMAGE_SIZE_BYTES,
-	MAX_IMAGES_PER_MESSAGE,
-	SUPPORTED_IMAGE_MIME_TYPES
+  type ImageAttachment,
+  isSupportedImageType,
+  MAX_IMAGE_SIZE_BYTES,
+  MAX_IMAGES_PER_MESSAGE,
+  SUPPORTED_IMAGE_MIME_TYPES
 } from 'worker/types/image-attachment';
 
 // Auth types imported from worker
-export type { 
-  AuthSession, 
-  ApiKeyInfo, 
-  AuthResult, 
+export type {
+  AuthSession,
+  ApiKeyInfo,
+  AuthResult,
   AuthUser,
-  OAuthProvider 
+  OAuthProvider
 } from 'worker/types/auth-types';
-export type { 
-  SessionResponse 
+export type {
+  SessionResponse
 } from 'worker/utils/authUtils';
 
 // Auth API Response Types (using existing worker types)
@@ -268,6 +289,6 @@ export interface ApiKeysData {
 }
 
 export type {
-    GitHubExportOptions,
-    GitHubExportResult,
+  GitHubExportOptions,
+  GitHubExportResult,
 } from 'worker/services/github/types';

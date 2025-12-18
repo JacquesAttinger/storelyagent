@@ -189,9 +189,21 @@ export function getSecureHeadersConfig(env: Env): SecureHeadersConfig {
                 `wss://${env.CUSTOM_DOMAIN || '*'}`,
                 // API endpoints
                 "https://api.github.com",
-                "https://api.cloudflare.com"
+                "https://api.cloudflare.com",
+                // Preview URLs (Cloudflare Tunnel and local previews)
+                "https://*.trycloudflare.com",
+                "http://localhost:*",
+                "http://127.0.0.1:*"
             ],
-            frameSrc: ["'none'"],
+            frameSrc: [
+                // Allow preview iframes from Cloudflare Tunnel URLs
+                "https://*.trycloudflare.com",
+                // Allow localhost previews in development
+                ...(isDevelopment ? ["http://localhost:*", "http://127.0.0.1:*"] : []),
+                // Allow previews from custom preview domain if configured
+                ...(env.CUSTOM_PREVIEW_DOMAIN ? [`https://*.${env.CUSTOM_PREVIEW_DOMAIN}`] : []),
+                ...(env.CUSTOM_DOMAIN ? [`https://*.${env.CUSTOM_DOMAIN}`] : [])
+            ],
             objectSrc: ["'none'"],
             mediaSrc: ["'self'"],
             workerSrc: ["'self'", "blob:"],

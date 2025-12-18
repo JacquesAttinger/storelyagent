@@ -20,7 +20,8 @@ Please provide a valid response that matches the expected output format exactly.
 /**
  * Helper function to execute AI inference with consistent error handling
  * @param params Parameters for the inference operation
- * @returns The inference result or null if error
+ * @returns The inference result
+ * @throws InferError if all retry attempts are exhausted
  */
 
 interface InferenceParamsBase {
@@ -73,7 +74,7 @@ export async function executeInference<T extends z.AnyZodObject>(   {
 }: InferenceParamsBase &    {
     schema?: T;
     format?: SchemaFormat;
-}): Promise<InferResponseString | InferResponseObject<T> | null> {
+}): Promise<InferResponseString | InferResponseObject<T>> {
     let conf: ModelConfig | undefined;
     
     if (modelConfig) {
@@ -100,11 +101,14 @@ export async function executeInference<T extends z.AnyZodObject>(   {
     // Exponential backoff for retries
     const backoffMs = (attempt: number) => Math.min(500 * Math.pow(2, attempt), 10000);
 
-    let useCheaperModel = false;
+    let useFallbackModel = false;
+    // Use the configured fallback model, or default to GPT-4.1 (widely available)
+    const fallbackModelName = finalConf?.fallbackModel || AIModels.OPENAI_4_1;
 
     for (let attempt = 0; attempt < retryLimit; attempt++) {
+        const currentModel = useFallbackModel ? fallbackModelName : modelName;
         try {
-            logger.info(`Starting ${agentActionName} operation with model ${modelName} (attempt ${attempt + 1}/${retryLimit})`);
+            logger.info(`Starting ${agentActionName} operation with model ${currentModel} (attempt ${attempt + 1}/${retryLimit})`);
 
             const result = schema ? await infer<T>({
                 env,
@@ -115,13 +119,13 @@ export async function executeInference<T extends z.AnyZodObject>(   {
                 actionKey: agentActionName,
                 format,
                 maxTokens,
-                modelName: useCheaperModel ? AIModels.GEMINI_2_5_FLASH : modelName,
+                modelName: currentModel,
                 formatOptions: {
                     debug: false,
                 },
                 tools,
                 stream,
-                reasoning_effort: useCheaperModel ? undefined : reasoning_effort,
+                reasoning_effort: useFallbackModel ? undefined : reasoning_effort,
                 temperature,
                 abortSignal: context.abortSignal,
             }) : await infer({
@@ -129,11 +133,11 @@ export async function executeInference<T extends z.AnyZodObject>(   {
                 metadata: context,
                 messages,
                 maxTokens,
-                modelName: useCheaperModel ? AIModels.GEMINI_2_5_FLASH: modelName,
+                modelName: currentModel,
                 tools,
                 stream,
                 actionKey: agentActionName,
-                reasoning_effort: useCheaperModel ? undefined : reasoning_effort,
+                reasoning_effort: useFallbackModel ? undefined : reasoning_effort,
                 temperature,
                 abortSignal: context.abortSignal,
             });
@@ -152,32 +156,62 @@ export async function executeInference<T extends z.AnyZodObject>(   {
             }
             
             const isLastAttempt = attempt === retryLimit - 1;
-            logger.error(
-                `Error during ${agentActionName} operation (attempt ${attempt + 1}/${retryLimit}):`,
-                error
-            );
+            
+            // Enhanced error logging
+            const errorDetails = {
+                action: agentActionName,
+                attempt: `${attempt + 1}/${retryLimit}`,
+                model: currentModel,
+                fallbackModel: fallbackModelName,
+                willUseFallback: !useFallbackModel, // Will switch on next attempt
+                errorName: error instanceof Error ? error.name : 'Unknown',
+                errorMessage: error instanceof Error ? error.message : String(error),
+                // Extract HTTP status if available
+                httpStatus: (error as any)?.status || (error as any)?.statusCode || 'N/A',
+            };
+            
+            logger.error(`Model call failed`, errorDetails);
 
             if (error instanceof InferError && !(error instanceof AbortError)) {
-                // If its an infer error and not an abort error, we can append the partial response to the list of messages and ask a cheaper model to retry the generation
+                // If its an infer error and not an abort error, we can append the partial response to the list of messages and ask the fallback model to retry
                 if (error.response && error.response.length > 1000) {
                     messages.push(createAssistantMessage(error.response));
                     messages.push(createUserMessage(responseRegenerationPrompts));
-                    useCheaperModel = true;
+                    logger.info(`Appending partial response (${error.response.length} chars) for retry`);
                 }
+                // Switch to fallback model for retries
+                if (!useFallbackModel) {
+                    logger.info(`Switching to fallback model: ${fallbackModelName}`);
+                }
+                useFallbackModel = true;
             } else {
-                // Try using fallback model if available
-                modelName = conf?.fallbackModel || modelName;
+                // For other errors, also try fallback model
+                if (!useFallbackModel) {
+                    logger.info(`Switching to fallback model due to error: ${fallbackModelName}`);
+                }
+                useFallbackModel = true;
             }
 
             if (!isLastAttempt) {
                 // Wait with exponential backoff before retrying
                 const delay = backoffMs(attempt);
-                logger.info(`Retrying in ${delay}ms...`);
+                logger.info(`Retrying ${agentActionName} in ${delay}ms with model ${useFallbackModel ? fallbackModelName : modelName}...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                // All retries exhausted - throw the last error with detailed context
+                const finalErrorMsg = `${agentActionName} failed after ${retryLimit} attempts. Last model: ${currentModel}. Error: ${error instanceof Error ? error.message : String(error)}`;
+                logger.error(`All retries exhausted for ${agentActionName}`, {
+                    primaryModel: modelName,
+                    fallbackModel: fallbackModelName,
+                    lastAttemptModel: currentModel,
+                    totalAttempts: retryLimit,
+                });
+                throw new InferError(finalErrorMsg, error instanceof Error ? error.message : String(error));
             }
         }
     }
-    return null;
+    // This should never be reached, but TypeScript needs it
+    throw new InferError(`${agentActionName} operation failed unexpectedly`, '');
 }
 
 /**

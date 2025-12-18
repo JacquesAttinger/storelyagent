@@ -32,6 +32,41 @@ const SYSTEM_PROMPT = `<ROLE>
       4. Do NOT add extra features like blogs, loyalty programs, wishlists, reviews, etc. unless explicitly requested
     - **Stay minimal and focused.** A clean, well-styled store with sample products is better than an over-engineered store with features the user didn't ask for.
     - If unsure whether to add a feature, DON'T add it. The user can always request more features later.
+    
+    **INITIAL PHASES - FRONTEND ONLY:**
+    - Plan the FIRST phases to focus ONLY on frontend changes. Backend and admin are READ-ONLY and auto-deployed.
+    - Initial phases should focus exclusively on:
+      1. **Visual styling**: Apply the user's requested theme, branding, colors, typography to existing components
+      2. **Sample products**: Update sample/mock product data to match the store's theme (names, descriptions, prices, image URLs)
+      3. **UI polish**: Improve layouts, spacing, animations, and visual hierarchy
+    
+    **CRITICAL - HOME PAGE CUSTOMIZATION:**
+    - The HOME PAGE (index.liquid) MUST be completely customized to reflect the user's store concept and brand
+    - If user says "fishing store" - the home page should have fishing-themed colors, copy, and CSS styling
+    - If user says "fashion boutique" - the home page should feel elegant, sophisticated, with fashion-forward design
+    - The home page hero section MUST include:
+      1. A compelling headline that reflects the store's niche/brand
+      2. A subheadline that communicates the store's value proposition
+      3. **MINIMALIST CSS styling** - use gradients, solid colors, and shadows. NO external images or logos.
+      4. Clear call-to-action buttons to browse products
+    - DO NOT leave the default generic "Shop with Confidence" text - customize it for the user's specific store
+    
+    **CRITICAL - SAMPLE PRODUCT REQUIREMENT:**
+    - You MUST create at least 1 sample product in the seed.sql file that matches the store's theme
+    - The sample product should have:
+      1. A realistic product name relevant to the store's niche
+      2. A compelling description
+      3. A realistic price
+      4. A CSS-styled placeholder for the image (gradient background or colored container with product name)
+    - This ensures users can immediately see what their shop page looks like with real products
+    - The shop page (/products) MUST display this sample product correctly
+    
+    - **CRITICAL - BACKEND AND ADMIN ARE READ-ONLY:**
+      - Backend API (api-worker/), worker routes, and admin dashboard (admin-app/) are automatically deployed when store is created
+      - Agent CANNOT modify any files in api-worker/, worker/, or admin-app/ directories
+      - Backend API endpoints are already available and working - use them as-is
+      - Admin dashboard is available but read-only - do not plan changes to it
+      - DO NOT plan changes to backend or admin - they are read-only
 
     **REMEMBER: This is not a toy or educational project. This is a serious ecommerce project which the client is either undertaking for building their own online store/business OR for testing out our capabilities and quality.**
 </TASK>
@@ -77,6 +112,8 @@ const SYSTEM_PROMPT = `<ROLE>
 
     ${PROMPT_UTILS.UI_GUIDELINES}
 
+    ${PROMPT_UTILS.LIQUID_CODE_QUALITY_RULES}
+
     ## Frameworks & Dependencies
     • Choose an exhaustive set of well-known libraries, components and dependencies that can be used to build the application with as little effort as possible.
         - **Select libraries that work out-of-the-box** without requiring API keys or environment variable configuration
@@ -107,13 +144,14 @@ const SYSTEM_PROMPT = `<ROLE>
         - This provides a clear, verifiable test case for the core algorithm.
     • **Domain relevant pitfalls:** Provide concise, single line domain specific and relevant pitfalls so the coder can avoid them. Avoid giving generic advice that has already also been provided to you (because that would be provided to them too).
     
-    **Visual Assets - Use These Approaches:**
-    ✅ External image URLs: Use unsplash.com or placehold.co for images
-    ✅ Canvas drawings: \`<canvas>\` element for shapes, patterns, charts
-    ✅ Simple SVG inline: \`<svg><circle cx="50" cy="50" r="40" fill="blue" /></svg>\`
+    **Visual Assets - Use These Approaches (MINIMALIST PREFERRED):**
+    ✅ CSS visuals: Use Tailwind gradients (bg-gradient-to-r), solid colors, shadows, and borders
+    ✅ Placeholder containers: Styled div elements with gradient or solid backgrounds
+    ✅ Canvas drawings: \`<canvas>\` element for shapes, patterns, charts if needed
+    ✅ Simple SVG inline: \`<svg><circle cx="50" cy="50" r="40" fill="blue" /></svg>\` for icons
     ✅ Icon libraries: lucide-react, heroicons (specify in frameworks)
+    ❌ Never: External image URLs from Unsplash or other sources
     ❌ Never: .png, .jpg, .svg, .gif files in phase files list
-    Binary files cannot be generated. Always use the approaches above for visual content.
 </INSTRUCTIONS>
 
 <KEY GUIDELINES>
@@ -214,9 +252,9 @@ export async function generateBlueprint({ env, inferenceContext, query, language
         const userMessage = images && images.length > 0
             ? createMultiModalUserMessage(
                 `CLIENT REQUEST: "${query}"`,
-                await imagesToBase64(env, images), 
+                await imagesToBase64(env, images),
                 'high'
-              )
+            )
             : createUserMessage(`CLIENT REQUEST: "${query}"`);
 
         const messages = [
@@ -226,7 +264,7 @@ export async function generateBlueprint({ env, inferenceContext, query, language
 
         // Log messages to console for debugging
         // logger.info('Blueprint messages:', JSON.stringify(messages, null, 2));
-        
+
         // let reasoningEffort: "high" | "medium" | "low" | undefined = "medium" as const;
         // if (templateMetaInfo?.complexity === 'simple' || templateMetaInfo?.complexity === 'moderate') {
         //     console.log(`Using medium reasoning for simple/moderate queries`);

@@ -1,4 +1,5 @@
-import type { Blueprint, PhaseConceptType ,
+import type {
+    Blueprint, PhaseConceptType,
     FileOutputType,
 } from '../schemas';
 // import type { ScreenshotData } from './types';
@@ -34,7 +35,7 @@ export interface CodeGenState {
     lastPackageJson?: string; // Last package.json file contents
     templateName: string;
     sandboxInstanceId?: string;
-    
+
     shouldBeGenerating: boolean; // Persistent flag indicating generation should be active
     mvpGenerated: boolean;
     reviewingInitiated: boolean;
@@ -47,11 +48,21 @@ export interface CodeGenState {
     currentDevState: CurrentDevState;
     reviewCycles?: number; // Number of review cycles for code review phase
     currentPhase?: PhaseConceptType; // Current phase being worked on
-    
+
     conversationMessages: ConversationMessage[];
     projectUpdatesAccumulator: string[];
     inferenceContext: InferenceContext;
 
     lastDeepDebugTranscript: string | null;
     isDeepDebugging?: boolean; // Track if debug session is active
+    storeInfoPending?: boolean; // Track if waiting for store info before initialization
+    pendingInitArgs?: {
+        query: string;
+        language: string;
+        frameworks: string[];
+        hostname: string;
+        inferenceContext: InferenceContext;
+        images?: any[];
+        storeInfoMessage?: string; // Message to broadcast via WebSocket asking for store info
+    }; // Stored init args when waiting for store info before initialization
 } 

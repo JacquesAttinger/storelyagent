@@ -14,27 +14,27 @@ export const PROMPT_UTILS = {
      */
     replaceTemplateVariables(template: string, variables: Record<string, string>): string {
         let result = template;
-        
+
         for (const [key, value] of Object.entries(variables)) {
             const placeholder = `{{${key}}}`;
             result = result.replaceAll(placeholder, value ?? '');
         }
-        
+
         return result;
     },
 
     serializeTreeNodes(node: FileTreeNode): string {
         // The output starts with the root node's name.
         const outputParts: string[] = [node.path.split('/').pop() || node.path];
-    
+
         function processChildren(children: FileTreeNode[], prefix: string) {
             children.forEach((child, index) => {
                 const isLast = index === children.length - 1;
                 const connector = isLast ? '└── ' : '├── ';
                 const displayName = child.path.split('/').pop() || child.path;
-    
+
                 outputParts.push(prefix + connector + displayName);
-    
+
                 // If the child is a directory with its own children, recurse deeper.
                 if (child.type === 'directory' && child.children && child.children.length > 0) {
                     // The prefix for the next level depends on whether the current node
@@ -44,12 +44,12 @@ export const PROMPT_UTILS = {
                 }
             });
         }
-    
+
         // Start the process if the root node has children.
         if (node.children && node.children.length > 0) {
             processChildren(node.children, '');
         }
-    
+
         return outputParts.join('\n');
     },
 
@@ -59,30 +59,37 @@ export const PROMPT_UTILS = {
             const isLiquidTemplate = template.name === 'base-store' || template.frameworks?.includes('liquid');
             const liquidNote = isLiquidTemplate ? `
 **LIQUID TEMPLATE ARCHITECTURE:**
-This template uses Liquid templates (similar to Shopify) for the storefront and admin interfaces:
-- Storefront UI is in storefront-app/theme/ (layouts, templates, snippets, assets)
-- Admin UI is in admin-app/theme/ (layouts, templates, snippets, assets)
+This template uses LiquidJS for server-side templating (already installed - DO NOT add any liquid packages):
+- Storefront UI is in storefront-app/theme/ (layouts, templates, snippets, assets) - MODIFIABLE
+- Admin UI is in admin-app/theme/ (layouts, templates, snippets, assets) - READ-ONLY
+- LiquidJS is ALREADY in storefront-app/package.json - DO NOT install @shopify/liquid or any other liquid package
 - Liquid templates use variables passed from the API (store, products, product, etc.)
 - Custom Liquid filters are in theme/config/liquid-filters.js
 - JavaScript functionality (like CartAPI) is in theme/assets/
-- React components in src/ are for admin functionality only
-- Modify Liquid templates (.liquid files) to customize the UI, not React components for storefront
+- Modify Liquid templates (.liquid files) to customize the UI
 - Use Liquid syntax: {{ variable }}, {% if %}, {% for %}, {% include 'snippet' %}
 - Assets are referenced with: {{ 'filename.css' | asset_url }}
 - Money formatting: {{ price | money: currency }}
 
+**CRITICAL - READ-ONLY BACKEND AND ADMIN:**
+- Backend API (api-worker/) and worker routes are READ-ONLY and AUTO-DEPLOYED
+- Admin dashboard (admin-app/) is READ-ONLY
+- Backend and admin are automatically deployed when store is created
+- Agent CANNOT modify any files in api-worker/, worker/, or admin-app/ directories
+- Agent can ONLY modify frontend files in storefront-app/
+
 **When working with this template:**
-- For storefront changes: Edit Liquid files in storefront-app/theme/
-- For admin changes: Edit Liquid files in admin-app/theme/
-- For API changes: Edit api-worker/src/routes/
-- For React components: Edit src/components/admin/ (admin functionality only)
+- For storefront changes: Edit Liquid files in storefront-app/theme/ (ONLY MODIFIABLE AREA)
+- Backend (api-worker/) is read-only - do not attempt to modify it
+- Admin dashboard (admin-app/) is read-only - do not attempt to modify it
+- Backend API endpoints are already available and working
 ` : '';
-            
+
             const shadcnNote = !isLiquidTemplate ? `
 Apart from these files, All SHADCN Components are present in ./src/components/ui/* and can be imported from there, example: import { Button } from "@/components/ui/button";
 **Please do not rewrite these components, just import them and use them**
 ` : '';
-            
+
             return `
 <TEMPLATE DETAILS>
 The following are the details (structures and files) of the starting boilerplate template, on which the project is based.
@@ -134,8 +141,8 @@ and provide a preview url for the application.
                 const errorText = e.message;
                 // Remove any trace lines with no 'tsx' or 'ts' extension in them
                 const cleanedText = errorText.split('\n')
-                                    .map(line => line.includes('/deps/') && !(line.includes('.tsx') || line.includes('.ts')) ? '' : line).filter(line => line.trim() !== '')
-                                    .join('\n');
+                    .map(line => line.includes('/deps/') && !(line.includes('.tsx') || line.includes('.ts')) ? '' : line).filter(line => line.trim() !== '')
+                    .join('\n');
                 // Truncate to 1000 characters to prevent context overflow
                 return `<error>${cleanedText.slice(0, 1000)}</error>`;
             });
@@ -148,7 +155,7 @@ and provide a preview url for the application.
     serializeStaticAnalysis(staticAnalysis: StaticAnalysisResponse): string {
         const lintOutput = staticAnalysis.lint?.rawOutput || 'No linting issues detected';
         const typecheckOutput = staticAnalysis.typecheck?.rawOutput || 'No type checking issues detected';
-        
+
         return `**LINT ANALYSIS:**
 ${lintOutput}
 
@@ -750,7 +757,7 @@ const handleClick = useCallback(() => setCount(prev => prev + 1), []);
 ⚠️⚠️⚠️ THESE RULES OVERRIDE ALL OTHER CONSIDERATIONS INCLUDING CODE AESTHETICS ⚠️⚠️⚠️
 ⚠️⚠️⚠️ IF YOU WRITE FORBIDDEN PATTERNS, YOU MUST IMMEDIATELY REWRITE THE FILE ⚠️⚠️⚠️`,
 
-COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
+    COMMON_PITFALLS: `<AVOID COMMON PITFALLS>
     **TOP 6 MISSION-CRITICAL RULES (FAILURE WILL CRASH THE APP):**
     1. **DEPENDENCY VALIDATION:** BEFORE writing any import statement, verify it exists in <DEPENDENCIES>. Common failures: @xyflow/react uses { ReactFlow } not default import, @/lib/utils for cn function. If unsure, check the dependency list first.
     2. **IMPORT & EXPORT INTEGRITY:** Ensure every component, function, or variable is correctly defined and imported properly (and exported properly). Mismatched default/named imports will cause crashes. NEVER write \`import React, 'react';\` - always use \`import React from 'react';\`
@@ -1144,7 +1151,107 @@ export default function Page() {
 - Never place muted text over dark backgrounds; if background is dark, use paired *-foreground or text-white
 - Aim for >= 4.5:1 contrast for normal text (>= 3:1 for large)
 `,
-PROJECT_CONTEXT: `Here is everything you will need about the project:
+    LIQUID_CODE_QUALITY_RULES: `## CRITICAL CODE QUALITY RULES FOR LIQUID/ECOMMERCE
+
+### 🎨 CSS FILE STRUCTURE (CRITICAL):
+
+The storefront uses a **Tailwind CSS build step**:
+- **styles.css** = SOURCE file (edit this one) - supports @tailwind, @apply, @layer
+- **index.css** = COMPILED output (DO NOT edit) - auto-generated from styles.css
+
+**When modifying CSS:**
+- ✅ ALWAYS edit \`storefront-app/theme/assets/styles.css\`
+- ❌ NEVER edit \`storefront-app/theme/assets/index.css\` (it will be overwritten)
+- ✅ You CAN use @tailwind, @apply, @layer directives in styles.css
+- ✅ You CAN use Tailwind utility classes in Liquid templates (they get compiled)
+
+**CSS Best Practices:**
+- Use Tailwind utilities in templates: \`class="flex items-center gap-4 p-6"\`
+- Use @apply for custom component classes in styles.css:
+  \`\`\`css
+  .btn-gaming {
+    @apply bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold py-3 px-6 rounded-lg;
+  }
+  \`\`\`
+- Use CSS custom properties for theme colors (already defined in styles.css)
+
+### ❌ NEVER DO THESE (CRITICAL FAILURES):
+
+1. **NEVER create empty layout files (theme.liquid)**
+   - theme.liquid MUST contain complete HTML structure with <!DOCTYPE html>, <html>, <head>, <body>
+   - MUST include: meta tags, viewport, CSS links, JS scripts, header/footer includes
+   - An empty theme.liquid breaks the ENTIRE store
+
+2. **NEVER use prompt() or alert() for user input**
+   - BAD: \`const email = prompt('Enter email')\`
+   - GOOD: Create a styled modal component that matches site theme
+   - All user interactions should use custom UI components, not browser dialogs
+
+3. **NEVER hardcode dynamic data (badges, categories, etc.)**
+   - BAD: \`<span class="badge">PC</span>\` hardcoded for all products
+   - GOOD: \`<span class="badge">{{ product.platform }}</span>\` dynamic from product data
+   - All product attributes should come from the database/context
+
+4. **NEVER create non-functional interactive elements**
+   - BAD: Filter buttons that look clickable but do nothing
+   - GOOD: Filter buttons with JavaScript event handlers AND active state management
+   - Every button/link MUST have a working handler or href
+
+5. **NEVER skip SEO and accessibility**
+   - MUST have: <meta name="viewport">, <meta name="description">, <title>
+   - MUST have: Open Graph tags (og:title, og:description, og:image)
+   - MUST have: ARIA labels on interactive elements (aria-label, role)
+   - MUST have: alt text on images/image placeholders
+
+6. **NEVER leave images unsized**
+   - All product images MUST have: aspect-ratio, object-fit, max-width constraints
+   - Use Tailwind: \`class="aspect-[3/4] object-cover w-full"\`
+   - Without sizing, images will be HUGE and break the layout
+
+7. **NEVER use emojis in generated code or content**
+   - No emojis in HTML, Liquid templates, CSS, or JavaScript
+   - No emojis in product names, descriptions, or UI text
+   - Keep all text professional and emoji-free
+
+### ✅ ALWAYS DO THESE:
+
+1. **theme.liquid structure (COPY THIS PATTERN):**
+   \`\`\`liquid
+   <!DOCTYPE html>
+   <html lang="en">
+   <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <meta name="description" content="{{ store.description }}">
+     <title>{{ page_title }} | {{ store.name }}</title>
+     <link rel="stylesheet" href="/assets/index.css">
+   </head>
+   <body class="min-h-screen bg-surface-100">
+     {% include 'header' %}
+     <main>{{ content_for_layout }}</main>
+     {% include 'footer' %}
+     <script src="/assets/cart.js"></script>
+   </body>
+   </html>
+   \`\`\`
+
+2. **Interactive elements MUST work:**
+   - Add onclick handlers or form submissions for every button
+   - Implement JavaScript for filters, sorting, cart actions
+   - Show visual feedback (loading states, active states)
+
+3. **Dynamic data from context:**
+   - Use {{ product.* }} for product attributes
+   - Use {{ store.* }} for store settings
+   - Never hardcode values that should be dynamic
+
+4. **Proper image handling:**
+   - Use Tailwind aspect ratio: \`aspect-[3/4]\` or \`aspect-square\`
+   - Use object-fit: \`object-cover\` or \`object-contain\`
+   - Always set max-width or width constraints
+   - Provide fallback for missing images
+`,
+    PROJECT_CONTEXT: `Here is everything you will need about the project:
 
 <PROJECT_CONTEXT>
 
@@ -1190,11 +1297,22 @@ Here are all the latest relevant files in the current codebase:
 
 export const STRATEGIES_UTILS = {
     INITIAL_PHASE_GUIDELINES: `**First Phase: Stunning Frontend Foundation & Visual Excellence**
-        * **🎨 VISUAL DESIGN FOUNDATION:** Establish breathtaking visual foundation:
-            - **Design System Excellence:** Define beautiful color palettes, typography scales, and spacing rhythms
+        * **🏠 HOME PAGE CUSTOMIZATION (CRITICAL):** The home page MUST reflect the user's store concept:
+            - **Branded Hero Section:** Customize headline and subheadline to match the store's niche (NOT generic "Shop with Confidence")
+            - **MINIMALIST CSS DESIGN:** Use CSS-only visuals - gradients (bg-gradient-to-r), shadows, borders, and solid colors. Avoid external images or logos.
+            - **Color Scheme:** Apply colors that fit the store's brand and industry using Tailwind color utilities
+            - **Value Proposition:** Communicate what makes this store unique through typography and layout
+        * **🛍️ SAMPLE PRODUCT REQUIREMENT (CRITICAL):** Create exactly ONE product in seed.sql:
+            - **Name:** "Sample Product" (use this exact name)
+            - **Description:** Brief, relevant to the store's niche
+            - **Price:** Realistic for the store type (e.g., $29.99)
+            - **Image:** Set imageUrl to NULL (templates use CSS placeholders)
+            - **Visible on Shop Page:** The /products page MUST display this product
+        * **🎨 MINIMALIST VISUAL DESIGN FOUNDATION:** Establish clean, typography-focused visual foundation:
+            - **Design System Excellence:** Define beautiful color palettes, typography scales, and generous whitespace
             - **Component Library Mastery:** Leverage shadcn components to create stunning, cohesive interfaces
             - **Layout Architecture:** Build gorgeous navigation, headers, footers with perfect spacing and alignment
-            - **Visual Identity:** Establish consistent branding elements that create emotional connection
+            - **Typography-First Identity:** Let beautiful fonts, whitespace, and CSS accents define the brand (no external images/logos)
         * **✨ UI COMPONENT EXCELLENCE:** Create components that users love to interact with:
             - **Interactive Polish:** Every button, form, and clickable element has beautiful hover states
             - **Micro-Interactions:** Subtle animations that provide delightful feedback
@@ -1322,8 +1440,8 @@ export const STRATEGIES = {
     **This is a Cloudflare Workers & Durable Objects project. The environment is preconfigured. Absolutely DO NOT Propose changes to wrangler.toml or any other config files. These config files are hidden from you but they do exist.**
     **The Homepage of the frontend is a dummy page. It should be rewritten as the primary page of the application in the initial phase.**
     **Refrain from editing any of the 'dont touch' files in the project, e.g - package.json, vite.config.ts, wrangler.jsonc, etc.**
-</PHASES GENERATION STRATEGY>`, 
-FRONTEND_FIRST_CODING: `<PHASES GENERATION STRATEGY>
+</PHASES GENERATION STRATEGY>`,
+    FRONTEND_FIRST_CODING: `<PHASES GENERATION STRATEGY>
     **STRATEGY: Scalable, Demoable Frontend and core application First / Iterative Feature Addition later**
     The project would be developed live: The user (client) would be provided a preview link after each phase. This is our rapid development and delivery paradigm.
     The core principle is to establish a visually complete and polished frontend presentation early on with core functionalities implemented, before layering in more advanced functionality and fleshing out the backend.
@@ -1337,7 +1455,7 @@ FRONTEND_FIRST_CODING: `<PHASES GENERATION STRATEGY>
     ${STRATEGIES_UTILS.CODING_GUIDELINES}
 
     **SCOPE CONSTRAINT: Only implement features that the user explicitly requested. Do NOT add extra features. For simple store requests, focus on beautiful styling and sample products only.**
-</PHASES GENERATION STRATEGY>`, 
+</PHASES GENERATION STRATEGY>`,
 }
 
 export interface GeneralSystemPromptBuilderParams {
@@ -1390,7 +1508,7 @@ export function generalSystemPromptBuilder(
 export function issuesPromptFormatter(issues: IssueReport): string {
     const runtimeErrorsText = PROMPT_UTILS.serializeErrors(issues.runtimeErrors);
     const staticAnalysisText = PROMPT_UTILS.serializeStaticAnalysis(issues.staticAnalysis);
-    
+
     return `## ERROR ANALYSIS PRIORITY MATRIX
 
 ### 1. CRITICAL RUNTIME ERRORS (Fix First - Deployment Blockers)
@@ -1425,7 +1543,7 @@ export const USER_PROMPT_FORMATTER = {
                     files.forEach((file) => fileMap.set(file.filePath, file));
                     const lastPhaseFiles = lastPhase.files.map((file) => fileMap.get(file.path)).filter((file) => file !== undefined);
                     lastPhaseFilesDiff = lastPhaseFiles.map((file) => file.lastDiff).join('\n');
-        
+
                     // Set lastPhase = false for all phases but the last
                     phases.forEach((phase) => {
                         if (phase !== lastPhase) {
@@ -1443,7 +1561,7 @@ export const USER_PROMPT_FORMATTER = {
         // Split phases into older (redacted) and recent (full) groups
         const olderPhases = phases.slice(0, -recentPhasesCount);
         const recentPhases = phases.slice(-recentPhasesCount);
-        
+
         // Serialize older phases without files, recent phases with files
         let phasesText = '';
         if (olderPhases.length > 0) {
@@ -1456,9 +1574,9 @@ export const USER_PROMPT_FORMATTER = {
         if (recentPhases.length > 0) {
             phasesText += TemplateRegistry.markdown.serialize({ phases: recentPhases }, z.object({ phases: z.array(PhaseConceptSchema) }));
         }
-        
-        const redactionNotice = olderPhases.length > 0 
-            ? `**Note:** File details for the first ${olderPhases.length} phase(s) have been redacted to optimize context. Only the last ${recentPhasesCount} phase(s) include complete file information.\n` 
+
+        const redactionNotice = olderPhases.length > 0
+            ? `**Note:** File details for the first ${olderPhases.length} phase(s) have been redacted to optimize context. Only the last ${recentPhasesCount} phase(s) include complete file information.\n`
             : '';
 
         const variables: Record<string, string> = {
@@ -1471,7 +1589,7 @@ export const USER_PROMPT_FORMATTER = {
         };
 
         const prompt = PROMPT_UTILS.replaceTemplateVariables(PROMPT_UTILS.PROJECT_CONTEXT, variables);
-        
+
         return PROMPT_UTILS.verifyPrompt(prompt);
     },
 };
@@ -1499,13 +1617,13 @@ const getStyleInstructions = (style: TemplateSelection['styleSelection']): strin
 - Example Elements: Cartoon-style characters, brushstroke fonts, animated SVGs.
 - Heading Font options: Playfair Display, Fredericka the Great, Great Vibes
             `
-//         case 'Neumorphism':
-//             return `
-// **Style Name: Neumorphism (Soft UI)**
-// - Use a soft pastel background, high-contrast accent colors for functional elements e.g. navy, coral, or bright blue. Avoid monochrome UIs
-// - Light shadow (top-left) and dark shadow (bottom-right) to simulate extrusion or embedding, Keep shadows subtle but visible to prevent a washed-out look.
-// - Avoid excessive transparency in text — keep readability high.
-// - Integrate glassmorphism subtly`;
+        //         case 'Neumorphism':
+        //             return `
+        // **Style Name: Neumorphism (Soft UI)**
+        // - Use a soft pastel background, high-contrast accent colors for functional elements e.g. navy, coral, or bright blue. Avoid monochrome UIs
+        // - Light shadow (top-left) and dark shadow (bottom-right) to simulate extrusion or embedding, Keep shadows subtle but visible to prevent a washed-out look.
+        // - Avoid excessive transparency in text — keep readability high.
+        // - Integrate glassmorphism subtly`;
         case `Kid_Playful`:
             return `
 **Style Name: Kid Playful**

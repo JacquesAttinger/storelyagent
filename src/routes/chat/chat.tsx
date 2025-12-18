@@ -19,7 +19,6 @@ import { PhaseTimeline } from './components/phase-timeline';
 import { PreviewIframe } from './components/preview-iframe';
 import { ViewModeSwitch } from './components/view-mode-switch';
 import { DebugPanel, type DebugMessage } from './components/debug-panel';
-import { DeploymentControls } from './components/deployment-controls';
 import { useChat, type FileType } from './hooks/use-chat';
 import { type ModelConfigsData, type BlueprintType, SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
 import { Copy } from './components/copy';
@@ -48,7 +47,7 @@ export default function Chat() {
 	const [searchParams] = useSearchParams();
 	const userQuery = searchParams.get('query');
 	const agentMode = searchParams.get('agentMode') || 'deterministic';
-	
+
 	// Extract images from URL params if present
 	const userImages = useMemo(() => {
 		const imagesParam = searchParams.get('images');
@@ -121,16 +120,9 @@ export default function Chat() {
 		phaseTimeline,
 		isThinking,
 		onCompleteBootstrap,
-		// Deployment and generation control
-		isDeploying,
-		cloudflareDeploymentUrl,
-		deploymentError,
-		isRedeployReady,
-		isGenerationPaused,
+		waitingForStoreInfo,
+		// Generation control (stop button in chat)
 		isGenerating,
-		handleStopGeneration,
-		handleResumeGeneration,
-		handleDeployToCloudflare,
 		// Preview refresh control
 		shouldRefreshPreview,
 		// Preview deployment state
@@ -163,7 +155,6 @@ export default function Chat() {
 
 	// Debug panel state
 	const [debugMessages, setDebugMessages] = useState<DebugMessage[]>([]);
-	const deploymentControlsRef = useRef<HTMLDivElement>(null);
 
 	const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
@@ -220,7 +211,7 @@ export default function Chat() {
 
 	const [newMessage, setNewMessage] = useState('');
 	const [showTooltip, setShowTooltip] = useState(false);
-	
+
 	// Word count utilities
 	const MAX_WORDS = 4000;
 	const countWords = (text: string): number => {
@@ -418,7 +409,8 @@ export default function Chat() {
 
 	useEffect(() => {
 		// Only show bootstrap completion message for NEW chats, not when reloading existing ones
-		if (doneStreaming && !isGeneratingBlueprint && !blueprint && urlChatId === 'new') {
+		// Don't show if we're waiting for store info (agent not initialized yet)
+		if (doneStreaming && !isGeneratingBlueprint && !blueprint && urlChatId === 'new' && !waitingForStoreInfo) {
 			onCompleteBootstrap();
 			sendAiMessage(
 				createAIMessage(
@@ -435,6 +427,7 @@ export default function Chat() {
 		blueprint,
 		onCompleteBootstrap,
 		urlChatId,
+		waitingForStoreInfo,
 	]);
 
 	const isRunning = useMemo(() => {
@@ -533,13 +526,13 @@ export default function Chat() {
 					layout="position"
 					className="flex-1 shrink-0 flex flex-col basis-0 max-w-lg relative z-10 h-full min-h-0"
 				>
-					<div 
-					className={clsx(
-						'flex-1 overflow-y-auto min-h-0 chat-messages-scroll',
-						isDebugging && 'animate-debug-pulse'
-					)} 
-					ref={messagesContainerRef}
-				>
+					<div
+						className={clsx(
+							'flex-1 overflow-y-auto min-h-0 chat-messages-scroll',
+							isDebugging && 'animate-debug-pulse'
+						)}
+						ref={messagesContainerRef}
+					>
 						<div className="pt-5 px-4 pb-4 text-sm flex flex-col gap-5">
 							{appLoading ? (
 								<div className="flex items-center gap-2 text-text-tertiary">
@@ -549,64 +542,65 @@ export default function Chat() {
 							) : (
 								<>
 									{(appTitle || chatId) && (
-								<div className="flex items-center justify-between mb-2">
-									<div className="text-lg font-semibold">{appTitle}</div>
-								</div>
-							)}
+										<div className="flex items-center justify-between mb-2">
+											<div className="text-lg font-semibold">{appTitle}</div>
+										</div>
+									)}
 									<UserMessage
 										message={query ?? displayQuery}
 									/>
 									{import.meta.env
 										.VITE_AGENT_MODE_ENABLED && (
-										<div className="flex justify-between items-center py-2 border-b border-border-primary/50 mb-4">
-											<AgentModeDisplay
-												mode={
-													agentMode as
+											<div className="flex justify-between items-center py-2 border-b border-border-primary/50 mb-4">
+												<AgentModeDisplay
+													mode={
+														agentMode as
 														| 'deterministic'
 														| 'smart'
-												}
-											/>
-										</div>
-									)}
+													}
+												/>
+											</div>
+										)}
 								</>
 							)}
 
-							{mainMessage && (
-							<div className="relative">
-								<AIMessage
-									message={mainMessage.content}
-									isThinking={mainMessage.ui?.isThinking}
-									toolEvents={mainMessage.ui?.toolEvents}
-								/>
-								{chatId && (
-									<div className="absolute right-1 top-1">
-										<DropdownMenu>
-											<DropdownMenuTrigger asChild>
-												<Button
-													variant="ghost"
-													size="icon"
-													className="hover:bg-bg-3/80 cursor-pointer"
-												>
-													<MoreHorizontal className="h-4 w-4" />
-													<span className="sr-only">Chat actions</span>
-												</Button>
-											</DropdownMenuTrigger>
-											<DropdownMenuContent align="end" className="w-56">
-												<DropdownMenuItem
+							{/* Hide the initial "Thinking..." message when waiting for store info */}
+							{mainMessage && !(waitingForStoreInfo && mainMessage.content === 'Thinking...') && (
+								<div className="relative">
+									<AIMessage
+										message={mainMessage.content}
+										isThinking={mainMessage.ui?.isThinking}
+										toolEvents={mainMessage.ui?.toolEvents}
+									/>
+									{chatId && (
+										<div className="absolute right-1 top-1">
+											<DropdownMenu>
+												<DropdownMenuTrigger asChild>
+													<Button
+														variant="ghost"
+														size="icon"
+														className="hover:bg-bg-3/80 cursor-pointer"
+													>
+														<MoreHorizontal className="h-4 w-4" />
+														<span className="sr-only">Chat actions</span>
+													</Button>
+												</DropdownMenuTrigger>
+												<DropdownMenuContent align="end" className="w-56">
+													<DropdownMenuItem
 														onClick={(e) => {
 															e.preventDefault();
 															setIsResetDialogOpen(true);
 														}}
-												>
-													<RotateCcw className="h-4 w-4 mr-2" />
-													Reset conversation
-												</DropdownMenuItem>
-											</DropdownMenuContent>
-										</DropdownMenu>
-									</div>
-								)}
-							</div>
-						)}
+													>
+														<RotateCcw className="h-4 w-4 mr-2" />
+														Reset conversation
+													</DropdownMenuItem>
+												</DropdownMenuContent>
+											</DropdownMenu>
+										</div>
+									)}
+								</div>
+							)}
 
 							{otherMessages
 								.filter(message => message.role === 'assistant' && message.ui?.isThinking)
@@ -627,70 +621,6 @@ export default function Chat() {
 										isThinking={true}
 									/>
 								</div>
-							)}
-
-							<PhaseTimeline
-								projectStages={projectStages}
-								phaseTimeline={phaseTimeline}
-								files={files}
-								view={view}
-								activeFile={activeFile}
-								onFileClick={handleFileClick}
-								isThinkingNext={isThinking}
-								isPreviewDeploying={isPreviewDeploying}
-								progress={progress}
-								total={total}
-								parentScrollRef={messagesContainerRef}
-								onViewChange={(viewMode) => {
-									setView(viewMode);
-									hasSwitchedFile.current = true;
-								}}
-								chatId={chatId}
-								isDeploying={isDeploying}
-								handleDeployToCloudflare={handleDeployToCloudflare}
-								runtimeErrorCount={runtimeErrorCount}
-								staticIssueCount={staticIssueCount}
-								isDebugging={isDebugging}
-								isGenerating={isGenerating}
-								isThinking={isThinking}
-							/>
-
-							{/* Deployment and Generation Controls */}
-							{chatId && (
-								<motion.div
-									ref={deploymentControlsRef}
-									initial={{ opacity: 0, y: 20 }}
-									animate={{ opacity: 1, y: 0 }}
-									transition={{ duration: 0.3, delay: 0.2 }}
-									className="px-4 mb-6"
-								>
-									<DeploymentControls
-										isPhase1Complete={isPhase1Complete}
-										isDeploying={isDeploying}
-										deploymentUrl={cloudflareDeploymentUrl}
-										instanceId={chatId || ''}
-										isRedeployReady={isRedeployReady}
-										deploymentError={deploymentError}
-										appId={app?.id || chatId}
-										appVisibility={app?.visibility}
-										isGenerating={
-											isGenerating ||
-											isGeneratingBlueprint
-										}
-										isPaused={isGenerationPaused}
-										onDeploy={handleDeployToCloudflare}
-										onStopGeneration={handleStopGeneration}
-										onResumeGeneration={
-											handleResumeGeneration
-										}
-										onVisibilityUpdate={(newVisibility) => {
-											// Update app state if needed
-											if (app) {
-												app.visibility = newVisibility;
-											}
-										}}
-									/>
-								</motion.div>
 							)}
 
 							{otherMessages
@@ -714,59 +644,84 @@ export default function Chat() {
 									);
 								})}
 
+							{!waitingForStoreInfo && (
+								<PhaseTimeline
+									projectStages={projectStages}
+									phaseTimeline={phaseTimeline}
+									files={files}
+									view={view}
+									activeFile={activeFile}
+									onFileClick={handleFileClick}
+									isThinkingNext={isThinking}
+									isPreviewDeploying={isPreviewDeploying}
+									progress={progress}
+									total={total}
+									parentScrollRef={messagesContainerRef}
+									onViewChange={(viewMode) => {
+										setView(viewMode);
+										hasSwitchedFile.current = true;
+									}}
+									runtimeErrorCount={runtimeErrorCount}
+									staticIssueCount={staticIssueCount}
+									isDebugging={isDebugging}
+									isGenerating={isGenerating}
+									isThinking={isThinking}
+								/>
+							)}
+
 						</div>
 					</div>
 
 					<form
-                        ref={chatFormRef}
-                        onSubmit={onNewMessage}
-                        className="shrink-0 p-4 pb-5 bg-transparent"
-                        {...chatDragHandlers}
-                    >
-					<input
-						ref={imageInputRef}
-						type="file"
-						accept={SUPPORTED_IMAGE_MIME_TYPES.join(',')}
-						multiple
-						onChange={(e) => {
-							const files = Array.from(e.target.files || []);
-							if (files.length > 0) {
-								addImages(files);
-							}
-							e.target.value = '';
-						}}
-						className="hidden"
-						disabled={isChatDisabled}
-					/>
-					<div className="relative">
-						{isChatDragging && (
-							<div className="absolute inset-0 flex items-center justify-center bg-accent/10 backdrop-blur-sm rounded-xl z-50 pointer-events-none">
-								<p className="text-accent font-medium">Drop images here</p>
-							</div>
-						)}
-						{images.length > 0 && (
-							<div className="mb-2">
-								<ImageAttachmentPreview
-									images={images}
-									onRemove={removeImage}
-									compact
-								/>
-							</div>
-						)}
-						<textarea
-							value={newMessage}
+						ref={chatFormRef}
+						onSubmit={onNewMessage}
+						className="shrink-0 p-4 pb-5 bg-transparent"
+						{...chatDragHandlers}
+					>
+						<input
+							ref={imageInputRef}
+							type="file"
+							accept={SUPPORTED_IMAGE_MIME_TYPES.join(',')}
+							multiple
 							onChange={(e) => {
-								const newValue = e.target.value;
-								const newWordCount = countWords(newValue);
-								
-								// Only update if within word limit
-								if (newWordCount <= MAX_WORDS) {
-									setNewMessage(newValue);
-									const ta = e.currentTarget;
-									ta.style.height = 'auto';
-									ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+								const files = Array.from(e.target.files || []);
+								if (files.length > 0) {
+									addImages(files);
 								}
+								e.target.value = '';
 							}}
+							className="hidden"
+							disabled={isChatDisabled}
+						/>
+						<div className="relative">
+							{isChatDragging && (
+								<div className="absolute inset-0 flex items-center justify-center bg-accent/10 backdrop-blur-sm rounded-xl z-50 pointer-events-none">
+									<p className="text-accent font-medium">Drop images here</p>
+								</div>
+							)}
+							{images.length > 0 && (
+								<div className="mb-2">
+									<ImageAttachmentPreview
+										images={images}
+										onRemove={removeImage}
+										compact
+									/>
+								</div>
+							)}
+							<textarea
+								value={newMessage}
+								onChange={(e) => {
+									const newValue = e.target.value;
+									const newWordCount = countWords(newValue);
+
+									// Only update if within word limit
+									if (newWordCount <= MAX_WORDS) {
+										setNewMessage(newValue);
+										const ta = e.currentTarget;
+										ta.style.height = 'auto';
+										ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+									}
+								}}
 								onKeyDown={(e) => {
 									if (e.key === 'Enter') {
 										if (!e.shiftKey) {
@@ -845,13 +800,13 @@ export default function Chat() {
 
 				<AnimatePresence>
 					{showMainView && (
-					<motion.div
-						layout="position"
-						className="flex-1 flex shrink-0 basis-0 p-4 pl-0 ml-2 z-30 min-h-0"
-						initial={{ opacity: 0, scale: 0.84 }}
-						animate={{ opacity: 1, scale: 1 }}
-						transition={{ duration: 0.3, ease: 'easeInOut' }}
-					>
+						<motion.div
+							layout="position"
+							className="flex-1 flex shrink-0 basis-0 p-4 pl-0 ml-2 z-30 min-h-0"
+							initial={{ opacity: 0, scale: 0.84 }}
+							animate={{ opacity: 1, scale: 1 }}
+							transition={{ duration: 0.3, ease: 'easeInOut' }}
+						>
 							{view === 'preview' && previewUrl && (
 								<div className="flex-1 flex flex-col bg-bg-3 rounded-xl shadow-md shadow-bg-2 overflow-hidden border border-border-primary">
 									<div className="grid grid-cols-3 px-2 h-10 border-b bg-bg-2">
@@ -915,11 +870,10 @@ export default function Chat() {
 												</span>
 											</button>
 											<button
-												className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all duration-200 text-xs font-medium shadow-sm ${
-													isGitHubExportReady
-														? 'bg-gray-800 hover:bg-gray-900 text-white'
-														: 'bg-gray-600 text-gray-400 cursor-not-allowed'
-												}`}
+												className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all duration-200 text-xs font-medium shadow-sm ${isGitHubExportReady
+													? 'bg-gray-800 hover:bg-gray-900 text-white'
+													: 'bg-gray-600 text-gray-400 cursor-not-allowed'
+													}`}
 												onClick={isGitHubExportReady ? githubExport.openModal : undefined}
 												disabled={!isGitHubExportReady}
 												title={
@@ -1011,7 +965,7 @@ export default function Chat() {
 							)}
 
 
-                            {/* Disabled terminal for now */}
+							{/* Disabled terminal for now */}
 							{/* {view === 'terminal' && (
 								<div className="flex-1 flex flex-col bg-bg-3 rounded-xl shadow-md shadow-bg-2 overflow-hidden border border-border-primary">
 									<div className="grid grid-cols-3 px-2 h-10 bg-bg-2 border-b">
@@ -1191,14 +1145,14 @@ export default function Chat() {
 													}}
 													find={
 														edit &&
-														edit.filePath ===
+															edit.filePath ===
 															activeFile?.filePath
 															? edit.search
 															: undefined
 													}
 													replace={
 														edit &&
-														edit.filePath ===
+															edit.filePath ===
 															activeFile?.filePath
 															? edit.replacement
 															: undefined

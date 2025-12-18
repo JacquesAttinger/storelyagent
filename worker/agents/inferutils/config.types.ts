@@ -37,6 +37,7 @@ export enum AIModels {
 	OPENAI_4_1 = 'openai/gpt-4.1-2025-04-14',
     OPENAI_5 = 'openai/gpt-5',
     OPENAI_5_1 = 'openai/gpt-5.1',
+    OPENAI_5_2 = 'openai/gpt-5.2',
     OPENAI_5_MINI = 'openai/gpt-5-mini',
     OPENAI_OSS = 'openai/gpt-oss-120b',
     OPENAI_CODEX = 'openai/gpt-5.1-codex-max',

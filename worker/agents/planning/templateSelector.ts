@@ -7,6 +7,7 @@ import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
 import { TemplateSelection, TemplateSelectionSchema } from '../../agents/schemas';
 import { generateSecureToken } from 'worker/utils/cryptoUtils';
 import type { ImageAttachment } from '../../types/image-attachment';
+import { InferError } from '../inferutils/core';
 
 const logger = createLogger('TemplateSelector');
 interface SelectTemplateArgs {
@@ -130,6 +131,7 @@ ENTROPY SEED: ${generateSecureToken(64)} - for unique results`;
             schema: TemplateSelectionSchema,
             context: inferenceContext,
             maxTokens: 2000,
+            format: 'markdown',
         });
 
 
@@ -138,10 +140,11 @@ ENTROPY SEED: ${generateSecureToken(64)} - for unique results`;
 
     } catch (error) {
         logger.error("Error during AI template selection:", error);
-        if (error instanceof RateLimitExceededError || error instanceof SecurityError) {
+        // Propagate meaningful errors instead of swallowing them
+        if (error instanceof RateLimitExceededError || error instanceof SecurityError || error instanceof InferError) {
             throw error;
         }
-        // Fallback to no template selection in case of error
-        return { selectedTemplateName: null, reasoning: "An error occurred during the template selection process.", useCase: null, complexity: null, styleSelection: null, projectName: '' };
+        // For unexpected errors, wrap with more context
+        throw new Error(`Template selection failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 }

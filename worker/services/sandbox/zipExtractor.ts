@@ -6,8 +6,8 @@ import type { TemplateFile } from './sandboxTypes';
  * Extracts and encodes file contents as UTF-8 strings or base64 for binary data
  */
 export class ZipExtractor {
-    // Max uncompressed size (50MB)
-    private static readonly MAX_UNCOMPRESSED_SIZE = 50 * 1024 * 1024;
+    // Max uncompressed size (500MB) - templates may include node_modules
+    private static readonly MAX_UNCOMPRESSED_SIZE = 500 * 1024 * 1024;
 
     // Known binary file extensions - skip UTF-8 decode attempt
     private static readonly BINARY_EXTENSIONS = new Set([
@@ -35,16 +35,16 @@ export class ZipExtractor {
         try {
             const uint8Array = new Uint8Array(zipBuffer);
             const unzipped = unzipSync(uint8Array);
-            
+
             const files: TemplateFile[] = [];
             let totalUncompressedSize = 0;
-            
+
             for (const [filePath, fileData] of Object.entries(unzipped)) {
                 // Skip directories
                 if (filePath.endsWith('/')) {
                     continue;
                 }
-                
+
                 // Check size limits
                 totalUncompressedSize += fileData.byteLength;
                 if (totalUncompressedSize > this.MAX_UNCOMPRESSED_SIZE) {
@@ -52,12 +52,12 @@ export class ZipExtractor {
                         `Total uncompressed size exceeds ${this.MAX_UNCOMPRESSED_SIZE / 1024 / 1024}MB limit`
                     );
                 }
-                
+
                 let fileContents: string;
-                
+
                 // Check if file extension is known binary
                 const isBinary = this.isBinaryExtension(filePath);
-                
+
                 if (isBinary) {
                     // Skip UTF-8 decode attempt, go straight to base64
                     fileContents = `base64:${this.base64Encode(fileData)}`;
@@ -70,13 +70,13 @@ export class ZipExtractor {
                         fileContents = `base64:${this.base64Encode(fileData)}`;
                     }
                 }
-                
+
                 files.push({
                     filePath,
                     fileContents
                 });
             }
-            
+
             return files;
         } catch (error) {
             if (error instanceof Error) {
@@ -104,7 +104,7 @@ export class ZipExtractor {
             }
             return bytes;
         }
-        
+
         // UTF-8 text content
         const encoder = new TextEncoder();
         return encoder.encode(fileContents);
@@ -126,7 +126,7 @@ export class ZipExtractor {
     private static isBinaryExtension(filePath: string): boolean {
         const lastDot = filePath.lastIndexOf('.');
         if (lastDot === -1) return false;
-        
+
         const ext = filePath.substring(lastDot).toLowerCase();
         return this.BINARY_EXTENSIONS.has(ext);
     }
@@ -137,14 +137,14 @@ export class ZipExtractor {
     private static base64Encode(data: Uint8Array): string {
         let binaryString = '';
         const len = data.length;
-        
+
         // Process in chunks
         const chunkSize = 8192;
         for (let i = 0; i < len; i += chunkSize) {
             const chunk = data.subarray(i, Math.min(i + chunkSize, len));
             binaryString += String.fromCharCode(...chunk);
         }
-        
+
         return btoa(binaryString);
     }
 }

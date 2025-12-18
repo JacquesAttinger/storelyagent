@@ -25,7 +25,7 @@ export interface PhaseImplementationInputs {
     fileClosedCallback: (file: FileOutputType, message: string) => void
 }
 
-export interface PhaseImplementationOutputs{
+export interface PhaseImplementationOutputs {
     // rawFiles: FileOutputType[]
     fixedFilePromises: Promise<FileOutputType>[]
     deploymentNeeded: boolean
@@ -46,6 +46,18 @@ export const SYSTEM_PROMPT = `<ROLE>
     - Do NOT add extra features, improvements, or "nice-to-haves" beyond what was planned.
     - If the phase is for styling and sample products, that's ALL you do.
     - When in doubt, do LESS not more.
+    
+    **INITIAL PHASES - FRONTEND ONLY:**
+    - For INITIAL phases, make ONLY frontend changes. DO NOT modify any backend code.
+    - Focus exclusively on:
+      1. **Visual styling**: Apply theme, branding, colors, typography to existing components
+      2. **Sample products**: Update sample/mock product data to match the store's theme (names, descriptions, prices, image URLs)
+      3. **UI polish**: Improve layouts, spacing, animations, and visual hierarchy
+    - DO NOT touch:
+      - Backend API routes or server-side logic
+      - Database schemas or data layer code
+      - Authentication or payment processing code
+      - Any files in /api/, /server/, or backend directories
     
     **Implementation Process:**
     1. **ANALYZE** current codebase snapshot and identify what needs to be built FOR THIS PHASE ONLY
@@ -69,13 +81,14 @@ export const SYSTEM_PROMPT = `<ROLE>
 <CONTEXT>
     •   You MUST adhere to the <BLUEPRINT> and the <CURRENT_PHASE> provided to implement the current phase. It is your primary specification.
     •   The project was started based on our ecommerce store template from our custom store template repository. It comes preconfigured with certain ecommerce components preinstalled. 
-    •   **LIQUID TEMPLATE ARCHITECTURE (if base-store template):** The base-store template uses Liquid templates (Shopify-like) for storefront and admin UIs:
-        - Storefront UI files are in storefront-app/theme/ (layouts, templates, snippets, assets)
-        - Admin UI files are in admin-app/theme/ (layouts, templates, snippets, assets)
-        - Edit .liquid files to modify the UI, not React components for storefront
+    •   **LIQUID TEMPLATE ARCHITECTURE (if base-store template):** The base-store template uses LiquidJS templates (already installed):
+        - Storefront UI files are in storefront-app/theme/ (layouts, templates, snippets, assets) - MODIFIABLE
+        - Admin UI files are in admin-app/theme/ (layouts, templates, snippets, assets) - READ-ONLY
+        - **LiquidJS is ALREADY INSTALLED** - DO NOT install @shopify/liquid or any other liquid package
+        - Edit .liquid files to modify the UI
         - Use Liquid syntax: {{ variable }}, {% if condition %}, {% for item in items %}, {% include 'snippet-name' %}
         - Assets: {{ 'filename.css' | asset_url }}, Money: {{ price | money: currency }}
-        - React components in src/ are only for admin functionality
+        - **CRITICAL - BACKEND AND ADMIN ARE READ-ONLY:** Backend API (api-worker/), worker routes, and admin dashboard (admin-app/) are automatically deployed and read-only. Do NOT modify any files in api-worker/, worker/, or admin-app/ directories.
     •   You will be provided with all of the current project code. Please go through it thoroughly, and understand it deeply before beginning your work. Use the components, utilities and APIs provided in the project.
     •   Due to security constraints, Only a fixed set of packages and dependencies are allowed for you to use which are preconfigured in the project and listed in <DEPENDENCIES>. Verify every import statement against them before using them.
     •   If you see any other dependency being referenced, Immediately correct it.
@@ -84,6 +97,8 @@ export const SYSTEM_PROMPT = `<ROLE>
 ${PROMPT_UTILS.UI_NON_NEGOTIABLES_V3}
 
 ${PROMPT_UTILS.UI_GUIDELINES}
+
+${PROMPT_UTILS.LIQUID_CODE_QUALITY_RULES}
 
 We follow the following strategy at our team for rapidly delivering projects:
 ${STRATEGIES.FRONTEND_FIRST_CODING}
@@ -434,7 +449,7 @@ const formatUserSuggestions = (suggestions?: string[] | null): string => {
     if (!suggestions || suggestions.length === 0) {
         return '';
     }
-    
+
     return `
 <USER SUGGESTIONS>
 The following client suggestions and feedback have been provided, relayed by our client conversation agent.
@@ -457,7 +472,7 @@ const userPromptFormatter = (phaseConcept: PhaseConceptType, issues: IssueReport
         phaseConcept,
         PhaseConceptSchema
     );
-    
+
     const prompt = PROMPT_UTILS.replaceTemplateVariables(specialPhasePromptOverrides[phaseConcept.name] || USER_PROMPT, {
         phaseText,
         issues: issuesPromptFormatter(issues),
@@ -473,39 +488,39 @@ export class PhaseImplementationOperation extends AgentOperation<PhaseImplementa
     ): Promise<PhaseImplementationOutputs> {
         const { phase, issues, userContext } = inputs;
         const { env, logger, context } = options;
-        
+
         logger.info(`Generating files for phase: ${phase.name}`, phase.description, "files:", phase.files.map(f => f.path));
-    
+
         // Notify phase start
         const codeGenerationFormat = new SCOFFormat();
         // Build messages for generation
         const messages = getSystemPromptWithProjectContext(SYSTEM_PROMPT, context, CodeSerializerType.SCOF);
-        
+
         // Create user message with optional images
         const userPrompt = userPromptFormatter(phase, issues, userContext?.suggestions) + codeGenerationFormat.formatInstructions();
         const userMessage = userContext?.images && userContext.images.length > 0
             ? createMultiModalUserMessage(
                 userPrompt,
-                await imagesToBase64(env, userContext?.images), 
+                await imagesToBase64(env, userContext?.images),
                 'high'
             )
             : createUserMessage(userPrompt);
-        
+
         messages.push(userMessage);
-    
+
         // Initialize streaming state
         const streamingState: CodeGenerationStreamingState = {
             accumulator: '',
             completedFiles: new Map(),
             parsingState: {} as SCOFParsingState
         };
-    
+
         const fixedFilePromises: Promise<FileOutputType>[] = [];
 
         const agentActionName = inputs.isFirstPhase ? 'firstPhaseImplementation' : 'phaseImplementation';
 
         const shouldEnableRealtimeCodeFixer = inputs.shouldAutoFix && IsRealtimeCodeFixerEnabled(options.inferenceContext);
-    
+
         // Execute inference with streaming
         await executeInference({
             env: env,
@@ -535,7 +550,7 @@ export class PhaseImplementationOperation extends AgentOperation<PhaseImplementa
                                 logger.error(`Completed file not found: ${filePath}`);
                                 return;
                             }
-    
+
                             // Process the file contents
                             const originalContents = context.allFiles.find(f => f.filePath === filePath)?.fileContents || '';
                             completedFile.fileContents = FileProcessing.processGeneratedFileContents(
@@ -543,12 +558,12 @@ export class PhaseImplementationOperation extends AgentOperation<PhaseImplementa
                                 originalContents,
                                 logger
                             );
-    
+
                             const generatedFile: FileOutputType = {
                                 ...completedFile,
                                 filePurpose: FileProcessing.findFilePurpose(
-                                    filePath, 
-                                    phase, 
+                                    filePath,
+                                    phase,
                                     context.allFiles.reduce((acc, f) => ({ ...acc, [f.filePath]: f }), {})
                                 )
                             };
@@ -557,7 +572,7 @@ export class PhaseImplementationOperation extends AgentOperation<PhaseImplementa
                                 // Call realtime code fixer immediately - this is the "realtime" aspect
                                 const realtimeCodeFixer = new RealtimeCodeFixer(env, options.inferenceContext);
                                 const fixPromise = realtimeCodeFixer.run(
-                                    generatedFile, 
+                                    generatedFile,
                                     {
                                         // previousFiles: previousFiles,
                                         query: context.query,
@@ -569,7 +584,7 @@ export class PhaseImplementationOperation extends AgentOperation<PhaseImplementa
                             } else {
                                 fixedFilePromises.push(Promise.resolve(generatedFile));
                             }
-    
+
                             inputs.fileClosedCallback(generatedFile, `Completed generation of ${filePath}`);
                         }
                     );
@@ -582,7 +597,7 @@ export class PhaseImplementationOperation extends AgentOperation<PhaseImplementa
         const commands = streamingState.parsingState.extractedInstallCommands;
 
         logger.info("Files generated for phase:", phase.name, "with", fixedFilePromises.length, "files being fixed in real-time and extracted install commands:", commands);
-    
+
         // Return generated files for validation and deployment
         return {
             fixedFilePromises,

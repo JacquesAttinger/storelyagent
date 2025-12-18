@@ -1,0 +1,306 @@
+$ DEV_MODE=true vite
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProcessing wrangler.jsonc configuration:[0m
+
+    - "unsafe" fields are experimental and may change or break at any time.
+
+
+You or a plugin you are using have set `optimizeDeps.esbuildOptions` but this option is now deprecated. Vite now uses Rolldown to optimize the dependencies. Please use `optimizeDeps.rollupOptions` instead.
+(node:53486) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+Using vars defined in .dev.vars
+∷ Building container images for local development...
+
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.64kB done
+#1 WARN: FromPlatformFlagConstDisallowed: FROM --platform flag should not use constant value "linux/arm64" (line 2)
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/cloudflare/sandbox:0.4.14
+#2 DONE 0.5s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [ 1/12] FROM docker.io/cloudflare/sandbox:0.4.14@sha256:ee11df99a6749b6bc8eb99ab7668a07ce073e11d57eda431a335a91d299512e4
+#4 resolve docker.io/cloudflare/sandbox:0.4.14@sha256:ee11df99a6749b6bc8eb99ab7668a07ce073e11d57eda431a335a91d299512e4 done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 490B done
+#5 DONE 0.0s
+
+#6 [ 2/12] RUN apt-get update &&         apt-get install -y git ca-certificates curl procps net-tools         fonts-liberation         libasound2         libatk-bridge2.0-0         libatk1.0-0         libcups2         libdbus-1-3         libdrm2         libgbm1         libgtk-3-0         libnspr4         libnss3         libxcomposite1         libxdamage1         libxfixes3         libxkbcommon0         libxrandr2         xdg-utils         wget gnupg2 &&         update-ca-certificates &&         case amd64 in             "amd64") ARCH="amd64" ;;             "arm64") ARCH="arm64" ;;             *) echo "Unsupported architecture: amd64"; exit 1 ;;         esac &&         curl -L -k --output cloudflared "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${ARCH}" &&         chmod +x cloudflared &&         mv cloudflared /usr/local/bin/ &&         rm -rf /var/lib/apt/lists/* &&         git config --global user.email "vibesdk-bot@cloudflare.com" &&         git config --global user.name "Cloudflare Vibesdk bot"
+#6 CACHED
+
+#7 [ 7/12] RUN chmod +x /workspace/container/cli-tools.ts
+#7 CACHED
+
+#8 [ 9/12] RUN bunx tsc --version
+#8 CACHED
+
+#9 [11/12] RUN chmod 755 /workspace/data
+#9 CACHED
+
+#10 [ 6/12] RUN bun install && bun run build
+#10 CACHED
+
+#11 [ 3/12] RUN mkdir -p /workspace/container /workspace/data
+#11 CACHED
+
+#12 [ 8/12] RUN which bunx || ln -sf $(which bun) /usr/local/bin/bunx
+#12 CACHED
+
+#13 [ 5/12] WORKDIR /workspace/container
+#13 CACHED
+
+#14 [ 4/12] COPY container/ /workspace/container/
+#14 CACHED
+
+#15 [10/12] RUN ln -sf /workspace/container/cli-tools.ts /usr/local/bin/monitor-cli
+#15 CACHED
+
+#16 [12/12] WORKDIR /container-server
+#16 CACHED
+
+#17 exporting to image
+#17 exporting layers done
+#17 exporting manifest sha256:20cc660a437a158aa3ab896397727afae676163d695931f8944caf1cdb0619b9 done
+#17 exporting config sha256:49fc7386ad2bd170c2a1334f65b531e04487251b4dd355543c154a1b5efd05c0 done
+#17 naming to docker.io/cloudflare-dev/userappsandboxservice:8f8230f8 done
+#17 DONE 0.0s
+
+ [33m1 warning found (use docker --debug to expand):
+[0m - FromPlatformFlagConstDisallowed: FROM --platform flag should not use constant value "linux/arm64" (line 2)
+
+⚡️ Containers successfully built. To rebuild your containers during development, restart the Vite dev server (r + enter).
+12:00:55 PM [vite] (client) Forced re-optimization of dependencies
+
+  ROLLDOWN-VITE v7.1.13  ready in 4134 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+  ➜  Debug:   http://localhost:5173/__debug
+  ➜  press h + enter to show help
+{"level":"info","time":"2025-12-16T17:01:02.394Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/status"}
+{"level":"info","time":"2025-12-16T17:01:02.407Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/apps/public?page=1&limit=6&sort=popular&period=week"}
+{"level":"info","time":"2025-12-16T17:01:02.409Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/auth/providers"}
+requirement { required: false, level: 'public' } for user null
+requirement { required: false, level: 'public' } for user null
+requirement { required: false, level: 'public' } for user null
+{"level":"info","time":"2025-12-16T17:01:02.455Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/auth/profile"}
+requirement { required: true, level: 'authenticated' } for user {
+  id: 'bf599922-ce39-4f18-a344-366f8836e92b',
+  email: 'jayyala@gmail.com',
+  displayName: 'Jay Yalamanchili',
+  username: undefined,
+  avatarUrl: undefined,
+  bio: undefined,
+  timezone: 'UTC',
+  provider: 'email',
+  emailVerified: true,
+  createdAt: 2025-11-17T02:51:13.000Z
+}
+{"level":"info","time":"2025-12-16T17:01:02.479Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/apps"}
+{"level":"info","time":"2025-12-16T17:01:02.480Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/apps/favorites"}
+requirement { required: true, level: 'authenticated' } for user {
+  id: 'bf599922-ce39-4f18-a344-366f8836e92b',
+  email: 'jayyala@gmail.com',
+  displayName: 'Jay Yalamanchili',
+  username: undefined,
+  avatarUrl: undefined,
+  bio: undefined,
+  timezone: 'UTC',
+  provider: 'email',
+  emailVerified: true,
+  createdAt: 2025-11-17T02:51:13.000Z
+}
+requirement { required: true, level: 'authenticated' } for user {
+  id: 'bf599922-ce39-4f18-a344-366f8836e92b',
+  email: 'jayyala@gmail.com',
+  displayName: 'Jay Yalamanchili',
+  username: undefined,
+  avatarUrl: undefined,
+  bio: undefined,
+  timezone: 'UTC',
+  provider: 'email',
+  emailVerified: true,
+  createdAt: 2025-11-17T02:51:13.000Z
+}
+{"level":"info","time":"2025-12-16T17:01:05.921Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/auth/csrf-token"}
+requirement { required: false, level: 'public' } for user null
+{"level":"info","time":"2025-12-16T17:01:05.949Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/agent"}
+requirement { required: true, level: 'authenticated' } for user {
+  id: 'bf599922-ce39-4f18-a344-366f8836e92b',
+  email: 'jayyala@gmail.com',
+  displayName: 'Jay Yalamanchili',
+  username: undefined,
+  avatarUrl: undefined,
+  bio: undefined,
+  timezone: 'UTC',
+  provider: 'email',
+  emailVerified: true,
+  createdAt: 2025-11-17T02:51:13.000Z
+}
+{"level":"info","time":"2025-12-16T17:01:05.953Z","component":"CodingAgentController","msg":"Starting code generation process"}
+{"level":"info","time":"2025-12-16T17:01:05.960Z","component":"CodeGeneratorWebSocket","msg":"[Broadcast] {\"state\":{\"blueprint\":{},\"projectName\":\"\",\"query\":\"\",\"generatedPhases\":[],\"generatedFilesMap\":{},\"agentMode\":\"deterministic\",\"templateName\":\"\",\"commandsHistory\":[],\"lastPackageJson\":\"\",\"pendingUserInputs\":[],\"inferenceContext\":{},\"sessionId\":\"\",\"hostname\":\"\",\"conversationMessages\":[],\"currentDevState\":0,\"phasesCounter\":12,\"mvpGenerated\":false,\"shouldBeGenerating\":false,\"reviewingInitiated\":false,\"projectUpdatesAccumulator\":[],\"lastDeepDebugTranscript\":null,\"isDeepDebugging\":false},\"type\":\"cf_agent_state\"} to 0 connection(s)"}
+{
+  displayMessage: 'State updated',
+  id: 'TmB4gnxWcEv5FS6FVlGXD',
+  payload: {},
+  timestamp: 1765904465960,
+  type: 'state:update'
+}
+{"level":"info","time":"2025-12-16T17:01:05.960Z","component":"CodeGeneratorWebSocket","msg":"[Broadcast] {\"state\":{\"blueprint\":{},\"projectName\":\"\",\"query\":\"\",\"generatedPhases\":[],\"generatedFilesMap\":{},\"agentMode\":\"deterministic\",\"templateName\":\"\",\"commandsHistory\":[],\"lastPackageJson\":\"\",\"pendingUserInputs\":[],\"inferenceContext\":{},\"sessionId\":\"c855c8b2-12ab-447c-b3ea-428b0da03fc0\",\"hostname\":\"\",\"conversationMessages\":[],\"currentDevState\":0,\"phasesCounter\":12,\"mvpGenerated\":false,\"shouldBeGenerating\":false,\"reviewingInitiated\":false,\"projectUpdatesAccumulator\":[],\"lastDeepDebugTranscript\":null,\"isDeepDebugging\":false},\"type\":\"cf_agent_state\"} to 0 connection(s)"}
+{
+  displayMessage: 'State updated',
+  id: 'HaicbIdgZqZA3oAslc8bR',
+  payload: {},
+  timestamp: 1765904465960,
+  type: 'state:update'
+}
+{"level":"info","time":"2025-12-16T17:01:05.964Z","component":"CodeGeneratorWebSocket","msg":"[Broadcast] {\"mcp\":{\"prompts\":[],\"resources\":[],\"servers\":{},\"tools\":[]},\"type\":\"cf_agent_mcp_servers\"} to 0 connection(s)"}
+{"level":"info","time":"2025-12-16T17:01:05.964Z","component":"CodeGeneratorAgent","msg":"Agent undefined session: c855c8b2-12ab-447c-b3ea-428b0da03fc0 onStart","object":{"type":"CodeGeneratorAgent"},"sessionId":"c855c8b2-12ab-447c-b3ea-428b0da03fc0"}
+{"level":"warn","time":"2025-12-16T17:01:05.964Z","component":"CodeGeneratorAgent","msg":"Agent undefined session: c855c8b2-12ab-447c-b3ea-428b0da03fc0 onStart ignored, agent not initialized","object":{"type":"CodeGeneratorAgent"},"sessionId":"c855c8b2-12ab-447c-b3ea-428b0da03fc0"}
+{"level":"info","time":"2025-12-16T17:01:05.966Z","component":"CodingAgentController","msg":"Initialized inference context for user bf599922-ce39-4f18-a344-366f8836e92b","modelConfigsCount":0}
+{"level":"info","time":"2025-12-16T17:01:05.967Z","component":"InferenceUtils","msg":"No user configuration for conversationalResponse, using AGENT_CONFIG defaults"}
+{"level":"info","time":"2025-12-16T17:01:05.967Z","component":"InferenceUtils","msg":"Starting conversationalResponse operation with model anthropic/claude-sonnet-4-5 (attempt 1/5)"}
+[ModelCall] Routing Claude model to native Anthropic API (schema: conversationalResponse, tools: undefined)
+[ClaudeNative] Using native Anthropic API
+[ClaudeNative] Model: claude-sonnet-4-5, Schema: conversationalResponse, Tools: 0
+[ClaudeNative] Making API call (iteration 1/7)
+[ClaudeNative] Response received, stop_reason: end_turn
+[ClaudeNative] Successfully validated response against schema
+{"level":"info","time":"2025-12-16T17:01:10.311Z","component":"InferenceUtils","msg":"Successfully completed conversationalResponse operation"}
+{"level":"info","time":"2025-12-16T17:01:10.312Z","component":"StoreInfoCheck","msg":"Store info check result for initial query","hasStoreName":false,"hasDesign":false,"askFor":"both","reasoning":"This is an ecommerce store project (video game store). The user has not provided a specific store name (just the generic type 'video game store') and has not mentioned any design preferences, style, colors, or aesthetic descriptions."}
+{"level":"info","time":"2025-12-16T17:01:10.312Z","component":"StoreInfoCollection","msg":"Store info needed, setting up pending state","askFor":"both"}
+{"level":"info","time":"2025-12-16T17:01:10.312Z","component":"StoreInfoCollection","msg":"Set minimal state for agent 027db54b-8c89-447e-8cf9-a2307006c36e (template not selected yet)","query":"Create a video game store..."}
+{"level":"info","time":"2025-12-16T17:01:10.315Z","component":"StoreInfoCollection","msg":"Created minimal app record for agent 027db54b-8c89-447e-8cf9-a2307006c36e"}
+{"level":"info","time":"2025-12-16T17:01:10.316Z","component":"CodeGeneratorWebSocket","msg":"[Broadcast] {\"state\":{\"blueprint\":{},\"projectName\":\"\",\"query\":\"Create a video game store\",\"generatedFilesMap\":{},\"generatedPhases\":[],\"templateName\":\"\",\"shouldBeGenerating\":false,\"mvpGenerated\":false,\"reviewingInitiated\":false,\"agentMode\":\"deterministic\",\"sessionId\":\"\",\"hostname\":\"localhost:5173\",\"phasesCounter\":12,\"pendingUserInputs\":[],\"currentDevState\":0,\"conversationMessages\":[],\"projectUpdatesAccumulator\":[],\"inferenceContext\":{\"userModelConfigs\":{},\"agentId\":\"027db54b-8c89-447e-8cf9-a2307006c36e\",\"userId\":\"bf599922-ce39-4f18-a344-366f8836e92b\",\"enableRealtimeCodeFix\":false,\"enableFastSmartCodeFix\":false},\"lastDeepDebugTranscript\":null,\"isDeepDebugging\":false,\"commandsHistory\":[],\"storeInfoPending\":true,\"pendingInitArgs\":{\"query\":\"Create a video game store\",\"language\":\"typescript\",\"frameworks\":[\"react\",\"vite\"],\"hostname\":\"localhost:5173\",\"inferenceContext\":{\"userModelConfigs\":{},\"agentId\":\"027db54b-8c89-447e-8cf9-a2307006c36e\",\"userId\":\"bf599922-ce39-4f18-a344-366f8836e92b\",\"enableRealtimeCodeFix\":false,\"enableFastSmartCodeFix\":false},\"images\":[],\"storeInfoMessage\":\"Before we continue, I'd like to know a bit more about your store to make it perfect for you:\\n\\n1. **Store Name**: What would you like to name your store? (e.g., \\\"TechShop\\\", \\\"Fashion Boutique\\\", \\\"Artisan Crafts\\\")\\n\\n2. **Design Style**: What design aesthetic are you looking for? For example:\\n   - Modern and minimalist\\n   - Vintage and rustic\\n   - Bold and colorful\\n   - Elegant and sophisticated\\n   - Playful and fun\\n   - Or describe your preferred color scheme and visual style\"}},\"type\":\"cf_agent_state\"} to 0 connection(s)"}
+{
+  displayMessage: 'State updated',
+  id: '9HFUJVGnK91sKtZ0pFL8a',
+  payload: {},
+  timestamp: 1765904470317,
+  type: 'state:update'
+}
+{"level":"info","time":"2025-12-16T17:01:10.353Z","component":"App","msg":"Handling API request for: http://localhost/api/agent/027db54b-8c89-447e-8cf9-a2307006c36e/ws"}
+requirement {
+  required: true,
+  level: 'owner-only',
+  resourceOwnershipCheck: [AsyncFunction: checkAppOwnership]
+} for user {
+  id: 'bf599922-ce39-4f18-a344-366f8836e92b',
+  email: 'jayyala@gmail.com',
+  displayName: 'Jay Yalamanchili',
+  username: undefined,
+  avatarUrl: undefined,
+  bio: undefined,
+  timezone: 'UTC',
+  provider: 'email',
+  emailVerified: true,
+  createdAt: 2025-11-17T02:51:13.000Z
+}
+{"level":"info","time":"2025-12-16T17:01:10.362Z","component":"CodingAgentController","msg":"WebSocket connection request for chat: 027db54b-8c89-447e-8cf9-a2307006c36e"}
+{"level":"info","time":"2025-12-16T17:01:10.362Z","component":"CodingAgentController","msg":"WebSocket request details","headers":{"accept-encoding":"gzip, deflate, br, zstd","accept-language":"en-US,en;q=0.9","cache-control":"no-cache","connection":"Upgrade","cookie":"__stripe_mid=bc5a822f-5984-4d44-9bf2-6b93a1c91ee1705994; accessToken=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJiZjU5OTkyMi1jZTM5LTRmMTgtYTM0NC0zNjZmODgzNmU5MmIiLCJlbWFpbCI6ImpheXlhbGFAZ21haWwuY29tIiwic2Vzc2lvbklkIjoiNDk4M2UyMjEtNWYwMC00ZDJkLTljMTMtYTZmMzlkMWM2NzYyIiwidHlwZSI6ImFjY2VzcyIsImlhdCI6MTc2NTY0OTUwNiwiZXhwIjoxNzY1OTA4NzA2fQ.QzKrzP5ziHqRbUT2kzhK6cJtFK2-5i-Q7QpcwzpXPuI; csrf-token=%7B%22token%22%3A%2204741c869b1ce56a120838cb7ab5769b6e4eaf3c3244744e73129856aff751fb%22%2C%22timestamp%22%3A1765904465924%7D","host":"localhost:5173","origin":"http://localhost:5173","pragma":"no-cache","sec-websocket-extensions":"permessage-deflate; client_max_window_bits","sec-websocket-key":"QEcbfjbiTtpLg5xSYu1ycQ==","sec-websocket-version":"13","upgrade":"websocket","user-agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"},"url":"http://localhost/api/agent/027db54b-8c89-447e-8cf9-a2307006c36e/ws","chatId":"027db54b-8c89-447e-8cf9-a2307006c36e"}
+{"level":"info","time":"2025-12-16T17:01:10.364Z","component":"App","msg":"Handling API request for: http://localhost:5173/api/apps/027db54b-8c89-447e-8cf9-a2307006c36e"}
+{"level":"info","time":"2025-12-16T17:01:10.366Z","component":"CodingAgentController","msg":"Successfully got agent instance for chat: 027db54b-8c89-447e-8cf9-a2307006c36e"}
+requirement { required: false, level: 'public' } for user null
+Connection established
+{"level":"info","time":"2025-12-16T17:01:10.375Z","component":"CodeGeneratorAgent","msg":"Agent connected for agent 027db54b-8c89-447e-8cf9-a2307006c36e","object":{"type":"CodeGeneratorAgent"},"sessionId":"c855c8b2-12ab-447c-b3ea-428b0da03fc0","connection":{"id":"0ulJ2SxcSjuurmfqCngId","server":"027db54b-8c89-447e-8cf9-a2307006c36e"},"ctx":{"request":{}}}
+{"level":"info","time":"2025-12-16T17:01:10.376Z","component":"CodeGeneratorAgent","msg":"Broadcasting store info request via WebSocket","object":{"type":"CodeGeneratorAgent"},"sessionId":"c855c8b2-12ab-447c-b3ea-428b0da03fc0","storeInfoPending":true}
+{"level":"info","time":"2025-12-16T17:01:10.389Z","component":"CodeGeneratorWebSocket","msg":"Received WebSocket message from 0ulJ2SxcSjuurmfqCngId: {\"type\":\"get_conversation_state\"}"}
+{"level":"info","time":"2025-12-16T17:01:10.389Z","component":"CodeGeneratorWebSocket","msg":"Conversation state retrieved","id":"default","runningHistory":[],"fullHistory":[]}
+{"level":"info","time":"2025-12-16T17:01:10.389Z","component":"CodeGeneratorWebSocket","msg":"Received WebSocket message from 0ulJ2SxcSjuurmfqCngId: {\"type\":\"generate_all\"}"}
+{"level":"info","time":"2025-12-16T17:01:10.389Z","component":"CodeGeneratorWebSocket","msg":"Cannot start generation - waiting for store info from user"}
+{"level":"info","time":"2025-12-16T17:01:31.996Z","component":"CodeGeneratorWebSocket","msg":"[Broadcast] {\"state\":{\"blueprint\":{},\"projectName\":\"\",\"query\":\"Create a video game store\",\"generatedFilesMap\":{},\"generatedPhases\":[],\"templateName\":\"\",\"shouldBeGenerating\":false,\"mvpGenerated\":false,\"reviewingInitiated\":false,\"agentMode\":\"deterministic\",\"sessionId\":\"244d77fa-b49a-47f1-8290-42bd99e5533d\",\"hostname\":\"localhost:5173\",\"phasesCounter\":12,\"pendingUserInputs\":[],\"currentDevState\":0,\"conversationMessages\":[],\"projectUpdatesAccumulator\":[],\"inferenceContext\":{\"userModelConfigs\":{},\"agentId\":\"027db54b-8c89-447e-8cf9-a2307006c36e\",\"userId\":\"bf599922-ce39-4f18-a344-366f8836e92b\",\"enableRealtimeCodeFix\":false,\"enableFastSmartCodeFix\":false},\"lastDeepDebugTranscript\":null,\"isDeepDebugging\":false,\"commandsHistory\":[],\"storeInfoPending\":true,\"pendingInitArgs\":{\"query\":\"Create a video game store\",\"language\":\"typescript\",\"frameworks\":[\"react\",\"vite\"],\"hostname\":\"localhost:5173\",\"inferenceContext\":{\"userModelConfigs\":{},\"agentId\":\"027db54b-8c89-447e-8cf9-a2307006c36e\",\"userId\":\"bf599922-ce39-4f18-a344-366f8836e92b\",\"enableRealtimeCodeFix\":false,\"enableFastSmartCodeFix\":false},\"images\":[],\"storeInfoMessage\":\"Before we continue, I'd like to know a bit more about your store to make it perfect for you:\\n\\n1. **Store Name**: What would you like to name your store? (e.g., \\\"TechShop\\\", \\\"Fashion Boutique\\\", \\\"Artisan Crafts\\\")\\n\\n2. **Design Style**: What design aesthetic are you looking for? For example:\\n   - Modern and minimalist\\n   - Vintage and rustic\\n   - Bold and colorful\\n   - Elegant and sophisticated\\n   - Playful and fun\\n   - Or describe your preferred color scheme and visual style\"}},\"type\":\"cf_agent_state\"} to 1 connection(s)"}
+State updated
+{"level":"info","time":"2025-12-16T17:01:31.999Z","component":"CodeGeneratorWebSocket","msg":"[Broadcast] {\"mcp\":{\"prompts\":[],\"resources\":[],\"servers\":{},\"tools\":[]},\"type\":\"cf_agent_mcp_servers\"} to 1 connection(s)"}
+{"level":"info","time":"2025-12-16T17:01:31.999Z","component":"CodeGeneratorAgent","msg":"Agent 027db54b-8c89-447e-8cf9-a2307006c36e session: 244d77fa-b49a-47f1-8290-42bd99e5533d onStart","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:32.001Z","component":"CodeGeneratorAgent","msg":"Generating missing projectName","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b","projectName":"create-a-video-game--ulmnm6e5otadvvr6vwby_"}
+{"level":"info","time":"2025-12-16T17:01:32.001Z","component":"CodeGeneratorAgent","msg":"Migrating state: schema format, conversation cleanup, security fixes, and bootstrap setup","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b","generatedFilesCount":0,"finalConversationCount":0,"removedUserApiKeys":false}
+{"level":"info","time":"2025-12-16T17:01:32.001Z","component":"CodeGeneratorWebSocket","msg":"[Broadcast] {\"state\":{\"blueprint\":{},\"projectName\":\"create-a-video-game--ulmnm6e5otadvvr6vwby_\",\"query\":\"Create a video game store\",\"generatedFilesMap\":{},\"generatedPhases\":[],\"templateName\":\"\",\"shouldBeGenerating\":false,\"mvpGenerated\":false,\"reviewingInitiated\":false,\"agentMode\":\"deterministic\",\"sessionId\":\"244d77fa-b49a-47f1-8290-42bd99e5533d\",\"hostname\":\"localhost:5173\",\"phasesCounter\":12,\"pendingUserInputs\":[],\"currentDevState\":0,\"conversationMessages\":[],\"projectUpdatesAccumulator\":[],\"inferenceContext\":{\"userModelConfigs\":{},\"agentId\":\"027db54b-8c89-447e-8cf9-a2307006c36e\",\"userId\":\"bf599922-ce39-4f18-a344-366f8836e92b\",\"enableRealtimeCodeFix\":false,\"enableFastSmartCodeFix\":false},\"lastDeepDebugTranscript\":null,\"isDeepDebugging\":false,\"commandsHistory\":[],\"storeInfoPending\":true,\"pendingInitArgs\":{\"query\":\"Create a video game store\",\"language\":\"typescript\",\"frameworks\":[\"react\",\"vite\"],\"hostname\":\"localhost:5173\",\"inferenceContext\":{\"userModelConfigs\":{},\"agentId\":\"027db54b-8c89-447e-8cf9-a2307006c36e\",\"userId\":\"bf599922-ce39-4f18-a344-366f8836e92b\",\"enableRealtimeCodeFix\":false,\"enableFastSmartCodeFix\":false},\"images\":[],\"storeInfoMessage\":\"Before we continue, I'd like to know a bit more about your store to make it perfect for you:\\n\\n1. **Store Name**: What would you like to name your store? (e.g., \\\"TechShop\\\", \\\"Fashion Boutique\\\", \\\"Artisan Crafts\\\")\\n\\n2. **Design Style**: What design aesthetic are you looking for? For example:\\n   - Modern and minimalist\\n   - Vintage and rustic\\n   - Bold and colorful\\n   - Elegant and sophisticated\\n   - Playful and fun\\n   - Or describe your preferred color scheme and visual style\"}},\"type\":\"cf_agent_state\"} to 1 connection(s)"}
+State updated
+{"level":"info","time":"2025-12-16T17:01:32.001Z","component":"CodeGeneratorAgent","msg":"Agent 027db54b-8c89-447e-8cf9-a2307006c36e onStart skipped - waiting for store info","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:32.002Z","component":"CodeGeneratorWebSocket","msg":"Received WebSocket message from 0ulJ2SxcSjuurmfqCngId: {\"type\":\"user_suggestion\",\"message\":\"Store name is TechShop, design is modern and minimalist\"}"}
+{"level":"info","time":"2025-12-16T17:01:32.002Z","component":"CodeGeneratorWebSocket","msg":"Received user suggestion","messageLength":55,"hasImages":false,"imageCount":0}
+{"level":"info","time":"2025-12-16T17:01:32.002Z","component":"CodeGeneratorAgent","msg":"Processing user input message","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b","messageLength":55,"pendingInputsCount":0,"hasImages":false,"imageCount":0}
+{"level":"info","time":"2025-12-16T17:01:32.002Z","component":"CodeGeneratorAgent","msg":"Agent not initialized, initializing now with user response","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b","hasPendingInit":true,"hasQuery":true,"hasBlueprint":true}
+{"level":"info","time":"2025-12-16T17:01:32.003Z","component":"CodeGeneratorAgent","msg":"Selecting template with complete query (including store info)","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:32.017Z","component":"TemplateSelector","msg":"Asking AI to select a template","query":"Create a video game store\n\nUser provided additional information: Store name is TechShop, design is modern and minimalist","queryLength":120,"imagesCount":0,"availableTemplates":["base-store"],"templateCount":1}
+{"level":"info","time":"2025-12-16T17:01:32.017Z","component":"InferenceUtils","msg":"No user configuration for templateSelection, using AGENT_CONFIG defaults"}
+{"level":"info","time":"2025-12-16T17:01:32.017Z","component":"InferenceUtils","msg":"Starting templateSelection operation with model anthropic/claude-sonnet-4-5 (attempt 1/5)"}
+Getting API key for provider:  anthropic
+[ModelCall] Provider: anthropic, Model: anthropic/claude-sonnet-4-5, BaseURL: https://gateway.ai.cloudflare.com/v1/acb388d323ade27c62f345cdab2de344/vibesdk-gateway/compat, HasApiKey: true, ApiKeyPrefix: sk-ant-api...
+[ClaudeCall] DirectCall: false, ThinkingEnabled: false, BaseURL: https://gateway.ai.cloudflare.com/v1/acb388d323ade27c62f345cdab2de344/vibesdk-gateway/compat
+Token optimization: Original messages size ~5031 chars, optimized size ~5027 chars
+Running inference with anthropic/claude-sonnet-4-5 using structured output with markdown format, reasoning effort: undefined, max tokens: 2000, temperature: 0.6, baseURL: https://gateway.ai.cloudflare.com/v1/acb388d323ade27c62f345cdab2de344/vibesdk-gateway/compat
+Inference response received
+Total tokens used in prompt: 1926
+{"level":"info","time":"2025-12-16T17:01:42.203Z","component":"InferenceUtils","msg":"Successfully completed templateSelection operation"}
+{"level":"info","time":"2025-12-16T17:01:42.203Z","component":"TemplateSelector","msg":"AI template selection result: base-store, Reasoning: The base-store template is the perfect foundation for TechShop's video game store. As the only available template, it provides all essential ecommerce functionality needed for a gaming retail operation: comprehensive product catalog for game titles across platforms, shopping cart and checkout with Stripe payment integration for digital and physical game purchases, order management system for tracking customer orders, and a full admin dashboard for inventory management. The tech stack (React 19, TypeScript, Vite, Tailwind CSS) is ideal for creating the modern, minimalist design aesthetic requested. The template's flexible architecture allows easy customization for video game-specific features like platform filters (PlayStation, Xbox, PC, Nintendo), genre categorization, age ratings (ESRB), and digital download delivery. The Cloudflare Workers backend ensures fast global performance for international gaming customers, while the D1 database can be extended to include game-specific metadata like release dates, publishers, and multiplayer features."}
+{"level":"info","time":"2025-12-16T17:01:42.203Z","component":"CodeGeneratorAgent","msg":"Selected template","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b","selectedTemplate":{"selectedTemplateName":"base-store","reasoning":"The base-store template is the perfect foundation for TechShop's video game store. As the only available template, it provides all essential ecommerce functionality needed for a gaming retail operation: comprehensive product catalog for game titles across platforms, shopping cart and checkout with Stripe payment integration for digital and physical game purchases, order management system for tracking customer orders, and a full admin dashboard for inventory management. The tech stack (React 19, TypeScript, Vite, Tailwind CSS) is ideal for creating the modern, minimalist design aesthetic requested. The template's flexible architecture allows easy customization for video game-specific features like platform filters (PlayStation, Xbox, PC, Nintendo), genre categorization, age ratings (ESRB), and digital download delivery. The Cloudflare Workers backend ensures fast global performance for international gaming customers, while the D1 database can be extended to include game-specific metadata like release dates, publishers, and multiplayer features.","useCase":"video game store","complexity":"moderate","styleSelection":"Retro","projectName":"TechShop Gaming Emporium"}}
+📥 TEMPLATE DOWNLOAD: Looking for "base-store.zip" in R2 bucket
+✅ TEMPLATE DOWNLOADED: 157050 bytes
+📂 EXTRACTED FILES: 62 files from zip
+📂 SAMPLE FILES: infra/wrangler/wrangler.toml, infra/db/seed.sql, infra/db/schema.sql, wrangler.jsonc, .donttouch_files.json, admin-app/server.js, admin-app/README.md, admin-app/public/vite.svg, admin-app/public/favicon.svg, admin-app/package-lock.json...
+📦 PACKAGE.JSON FOUND: YES
+📦 PACKAGE.JSON PATH: "package.json"
+📦 PACKAGE.JSON SIZE: 980 chars
+📦 PACKAGE.JSON NAME: base-store
+📦 PACKAGE.JSON SCRIPTS: postinstall, dev, dev:storefront, dev:admin, dev:api, build:api, db:init, db:seed
+
+============================================================
+🆕 FRESH TEMPLATE LOADED FROM R2: base-store
+============================================================
+📦 TEMPLATE NAME: base-store
+📦 TEMPLATE VERSION: 1.0.0
+📦 DEV SCRIPT: concurrently -n storefront,admin,api -c blue,green,yellow "cd storefront-app && node server.js" "cd admin-app && PORT=5174 node server.js" "cd api-worker && wrangler dev --config wrangler.toml --port 8787"
+📦 BUILD SCRIPT: N/A
+📦 POSTINSTALL: cd storefront-app && bun install && cd ../admin-app && bun install && cd ../api-worker && bun install
+📦 DEPENDENCIES: NONE
+📦 DEV DEPENDENCIES: concurrently
+📁 TOTAL FILES: 59
+📁 HAS WORKER DIR: false
+📁 HAS ADMIN-APP DIR: true
+📁 HAS API-WORKER DIR: true
+============================================================
+
+{"level":"info","time":"2025-12-16T17:01:42.223Z","component":"CodeGeneratorAgent","msg":"🧠 Initializing SmartCodeGeneratorAgent with enhanced AI orchestration","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"244d77fa-b49a-47f1-8290-42bd99e5533d","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b","queryLength":120,"agentType":"deterministic"}
+{"level":"info","time":"2025-12-16T17:01:42.223Z","component":"CodeGeneratorAgent","msg":"========================================","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"7e552a51-d5ff-46c1-a57e-d69e4390f2e4","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:42.223Z","component":"CodeGeneratorAgent","msg":"[Agent] 🚀 AGENT STARTING - Initializing MCP manager...","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"7e552a51-d5ff-46c1-a57e-d69e4390f2e4","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:42.223Z","component":"CodeGeneratorAgent","msg":"========================================","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"7e552a51-d5ff-46c1-a57e-d69e4390f2e4","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:42.223Z","component":"MCPManager","msg":"[MCPManager] ========================================"}
+{"level":"info","time":"2025-12-16T17:01:42.223Z","component":"MCPManager","msg":"[MCPManager] INITIALIZING MCP MANAGER"}
+{"level":"info","time":"2025-12-16T17:01:42.223Z","component":"MCPManager","msg":"[MCPManager] ========================================"}
+{"level":"info","time":"2025-12-16T17:01:42.224Z","component":"MCPManager","msg":"[MCPManager] Initializing MCP manager...","sseServers":1}
+{"level":"info","time":"2025-12-16T17:01:42.224Z","component":"MCPManager","msg":"[MCPManager] SSE Servers: 1"}
+{"level":"info","time":"2025-12-16T17:01:42.224Z","component":"MCPManager","msg":"[MCPManager] Connecting to SSE MCP server: playwright-mcp","url":"https://playwright-mcp-storely.jayyala.workers.dev/sse"}
+{"level":"info","time":"2025-12-16T17:01:42.224Z","component":"MCPManager","msg":"[MCPManager] Connecting to SSE server","name":"playwright-mcp","url":"https://playwright-mcp-storely.jayyala.workers.dev/sse"}
+{"level":"info","time":"2025-12-16T17:01:42.239Z","component":"MCPManager","msg":"[MCPManager] Attempting connection to playwright-mcp","url":"https://playwright-mcp-storely.jayyala.workers.dev/sse"}
+{"level":"info","time":"2025-12-16T17:01:43.725Z","component":"MCPManager","msg":"[MCPManager] Successfully connected to playwright-mcp"}
+{"level":"info","time":"2025-12-16T17:01:43.725Z","component":"MCPManager","msg":"[MCPManager] Listing tools from playwright-mcp"}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] Found 24 tools from playwright-mcp","toolNames":["browser_close","browser_resize","browser_console_messages","browser_handle_dialog","browser_file_upload","browser_press_key","browser_navigate","browser_navigate_back","browser_navigate_forward","browser_network_requests","browser_pdf_save","browser_take_screenshot","browser_snapshot","browser_click","browser_drag","browser_hover","browser_type","browser_select_option","browser_tab_list","browser_tab_new","browser_tab_select","browser_tab_close","browser_generate_playwright_test","browser_wait_for"]}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] Connection to playwright-mcp complete","toolCount":24,"totalRegisteredTools":24}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] ✅ Initialized successfully"}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] Active connections: 1"}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] Available tools: 24"}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] Tools: browser_close, browser_resize, browser_console_messages, browser_handle_dialog, browser_file_upload, browser_press_key, browser_navigate, browser_navigate_back, browser_navigate_forward, browser_network_requests, browser_pdf_save, browser_take_screenshot, browser_snapshot, browser_click, browser_drag, browser_hover, browser_type, browser_select_option, browser_tab_list, browser_tab_new, browser_tab_select, browser_tab_close, browser_generate_playwright_test, browser_wait_for"}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] ========================================"}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] 📊 SUMMARY:","initialized":true,"activeConnections":1,"availableTools":24,"toolNames":["browser_close","browser_resize","browser_console_messages","browser_handle_dialog","browser_file_upload","browser_press_key","browser_navigate","browser_navigate_back","browser_navigate_forward","browser_network_requests","browser_pdf_save","browser_take_screenshot","browser_snapshot","browser_click","browser_drag","browser_hover","browser_type","browser_select_option","browser_tab_list","browser_tab_new","browser_tab_select","browser_tab_close","browser_generate_playwright_test","browser_wait_for"]}
+{"level":"info","time":"2025-12-16T17:01:43.825Z","component":"MCPManager","msg":"[MCPManager] MCP manager initialized successfully","activeConnections":1,"availableTools":24,"toolNames":["browser_close","browser_resize","browser_console_messages","browser_handle_dialog","browser_file_upload","browser_press_key","browser_navigate","browser_navigate_back","browser_navigate_forward","browser_network_requests","browser_pdf_save","browser_take_screenshot","browser_snapshot","browser_click","browser_drag","browser_hover","browser_type","browser_select_option","browser_tab_list","browser_tab_new","browser_tab_select","browser_tab_close","browser_generate_playwright_test","browser_wait_for"]}
+{"level":"info","time":"2025-12-16T17:01:43.826Z","component":"CodeGeneratorAgent","msg":"[Agent] ✅ MCP manager initialization completed","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"7e552a51-d5ff-46c1-a57e-d69e4390f2e4","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:43.826Z","component":"CodeGeneratorAgent","msg":"[Agent] 📋 Available MCP tools: browser_close, browser_resize, browser_console_messages, browser_handle_dialog, browser_file_upload, browser_press_key, browser_navigate, browser_navigate_back, browser_navigate_forward, browser_network_requests, browser_pdf_save, browser_take_screenshot, browser_snapshot, browser_click, browser_drag, browser_hover, browser_type, browser_select_option, browser_tab_list, browser_tab_new, browser_tab_select, browser_tab_close, browser_generate_playwright_test, browser_wait_for","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"7e552a51-d5ff-46c1-a57e-d69e4390f2e4","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:43.826Z","component":"CodeGeneratorAgent","msg":"Generating blueprint","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"7e552a51-d5ff-46c1-a57e-d69e4390f2e4","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b","query":"Create a video game store\n\nUser provided additional information: Store name is TechShop, design is modern and minimalist","queryLength":120,"imagesCount":0}
+{"level":"info","time":"2025-12-16T17:01:43.826Z","component":"CodeGeneratorAgent","msg":"Using language: typescript, frameworks: react, vite","object":{"type":"CodeGeneratorAgent","id":"027db54b-8c89-447e-8cf9-a2307006c36e"},"sessionId":"7e552a51-d5ff-46c1-a57e-d69e4390f2e4","agentId":"027db54b-8c89-447e-8cf9-a2307006c36e","userId":"bf599922-ce39-4f18-a344-366f8836e92b"}
+{"level":"info","time":"2025-12-16T17:01:43.826Z","component":"CodeGeneratorWebSocket","msg":"[Broadcast] generation_started to 1 connection(s)"}
+{"level":"info","time":"2025-12-16T17:01:43.826Z","component":"Blueprint","msg":"Generating application blueprint","query":"Create a video game store\n\nUser provided additional information: Store name is TechShop, design is modern and minimalist","queryLength":120,"imagesCount":0}
+{"level":"info","time":"2025-12-16T17:01:43.826Z","component":"Blueprint","msg":"Using template: base-store"}
+{"level":"info","time":"2025-12-16T17:01:43.828Z","component":"InferenceUtils","msg":"No user configuration for blueprint, using AGENT_CONFIG defaults"}
+{"level":"info","time":"2025-12-16T17:01:43.828Z","component":"InferenceUtils","msg":"Starting blueprint operation with model anthropic/claude-sonnet-4-5 (attempt 1/5)"}
+[ModelCall] Routing Claude model to native Anthropic API (schema: blueprint, tools: undefined)
+[ClaudeNative] Using native Anthropic API
+[ClaudeNative] Model: claude-sonnet-4-5, Schema: blueprint, Tools: 0
+[ClaudeNative] Making API call (iteration 1/7)

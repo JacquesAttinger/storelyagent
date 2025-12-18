@@ -11,7 +11,7 @@ import {
     setAllFilesCompleted,
     updatePhaseFileStatus,
 } from './file-state-helpers';
-import { 
+import {
     createAIMessage,
     handleRateLimitError,
     handleStreamingMessage,
@@ -47,7 +47,8 @@ export interface HandleMessageDeps {
     setRuntimeErrorCount: React.Dispatch<React.SetStateAction<number>>;
     setStaticIssueCount: React.Dispatch<React.SetStateAction<number>>;
     setIsDebugging: React.Dispatch<React.SetStateAction<boolean>>;
-    
+    setWaitingForStoreInfo?: React.Dispatch<React.SetStateAction<boolean>>;
+
     // Current state
     isInitialStateRestored: boolean;
     blueprint: BlueprintType | undefined;
@@ -59,7 +60,7 @@ export interface HandleMessageDeps {
     projectStages: any[];
     isGenerating: boolean;
     urlChatId: string | undefined;
-    
+
     // Functions
     updateStage: (stageId: string, updates: any) => void;
     sendMessage: (message: ConversationMessage) => void;
@@ -72,12 +73,12 @@ export interface HandleMessageDeps {
         messageType?: string,
         rawMessage?: unknown
     ) => void;
-    onTerminalMessage?: (log: { 
-        id: string; 
-        content: string; 
-        type: 'command' | 'stdout' | 'stderr' | 'info' | 'error' | 'warn' | 'debug'; 
-        timestamp: number; 
-        source?: string 
+    onTerminalMessage?: (log: {
+        id: string;
+        content: string;
+        type: 'command' | 'stdout' | 'stderr' | 'info' | 'error' | 'warn' | 'debug';
+        timestamp: number;
+        source?: string
     }) => void;
 }
 
@@ -115,6 +116,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setIsGenerating,
             setIsPhaseProgressActive,
             setIsDebugging,
+            setWaitingForStoreInfo,
             isInitialStateRestored,
             blueprint,
             query,
@@ -135,7 +137,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
         // Log messages except for frequent ones
         if (message.type !== 'file_chunk_generated' && message.type !== 'cf_agent_state' && message.type.length <= 50) {
             logger.info('received message', message.type, message);
-            onDebugMessage?.('websocket', 
+            onDebugMessage?.('websocket',
                 `${message.type}`,
                 JSON.stringify(message, null, 2),
                 'WebSocket',
@@ -143,7 +145,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 message
             );
         }
-        
+
         switch (message.type) {
             case 'conversation_cleared': {
                 // Reset chat messages to a subtle tool-event entry indicating success
@@ -156,17 +158,50 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'agent_connected': {
                 const { state, templateDetails, previewURL } = message;
                 console.log('Agent connected', state, templateDetails, previewURL);
-                
+
                 // Set preview URL if provided (e.g., from cached state)
                 if (previewURL) {
                     const finalPreviewURL = getPreviewUrl(previewURL, message.tunnelURL);
                     setPreviewUrl(finalPreviewURL);
                     logger.debug('📺 Preview URL set from agent_connected:', finalPreviewURL);
                 }
-                
+
+                // If agent is now initialized (has blueprint and template), reset waitingForStoreInfo
+                // This handles the case where user provided store info and agent just initialized
+                const hasBlueprint = state.blueprint && Object.keys(state.blueprint).length > 0;
+                const hasTemplate = state.templateName && state.templateName.trim() !== '';
+                if (hasBlueprint && hasTemplate && !state.storeInfoPending) {
+                    logger.debug('📥 Agent is now initialized after store info collection');
+                    setWaitingForStoreInfo?.(false);
+
+                    // Update stages to show initialization is complete
+                    updateStage('bootstrap', { status: 'completed' });
+                    updateStage('blueprint', { status: 'completed' });
+
+                    // Set the blueprint in UI
+                    setBlueprint(state.blueprint);
+
+                    // Load template files if available
+                    if (templateDetails?.allFiles) {
+                        const files = Object.entries(templateDetails.allFiles).map(([filePath, fileContents]) => ({
+                            filePath,
+                            fileContents,
+                        })).filter((file) => templateDetails.importantFiles?.includes(file.filePath) ?? false);
+                        logger.debug('📥 Loading bootstrap files after store info:', files.length);
+                        loadBootstrapFiles(files);
+                    }
+
+                    // Trigger code generation now that agent is ready
+                    logger.debug('🚀 Starting code generation after store info provided');
+                    sendWebSocketMessage(websocket, 'generate_all');
+
+                    // Mark initial state as restored so second agent_connected doesn't re-trigger
+                    setIsInitialStateRestored(true);
+                }
+
                 if (!isInitialStateRestored) {
                     logger.debug('📥 Performing initial state restoration');
-                    
+
                     if (state.blueprint && !blueprint) {
                         setBlueprint(state.blueprint);
                         updateStage('blueprint', { status: 'completed' });
@@ -202,18 +237,18 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         logger.debug('📋 Restoring phase timeline:', state.generatedPhases);
                         // If not actively generating, mark incomplete phases as cancelled (they were interrupted)
                         const isActivelyGenerating = state.shouldBeGenerating === true;
-                        
+
                         const timeline = state.generatedPhases.map((phase: any, index: number) => {
                             // Determine phase status:
                             // - completed if explicitly marked complete
                             // - cancelled if incomplete and not actively generating (interrupted)
                             // - generating if incomplete and actively generating
-                            const phaseStatus = phase.completed 
-                                ? 'completed' as const 
-                                : !isActivelyGenerating 
-                                    ? 'cancelled' as const 
+                            const phaseStatus = phase.completed
+                                ? 'completed' as const
+                                : !isActivelyGenerating
+                                    ? 'cancelled' as const
                                     : 'generating' as const;
-                            
+
                             return {
                                 id: `phase-${index}`,
                                 name: phase.name,
@@ -225,10 +260,10 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                                     // - completed if it exists in generated files
                                     // - cancelled if missing and not actively generating (interrupted)
                                     // - generating if missing and actively generating
-                                    const fileStatus = file 
-                                        ? 'completed' as const 
-                                        : !isActivelyGenerating 
-                                            ? 'cancelled' as const 
+                                    const fileStatus = file
+                                        ? 'completed' as const
+                                        : !isActivelyGenerating
+                                            ? 'cancelled' as const
                                             : 'generating' as const;
                                     return {
                                         path: filesConcept.path,
@@ -242,13 +277,13 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         });
                         setPhaseTimeline(timeline);
                     }
-                    
+
                     updateStage('bootstrap', { status: 'completed' });
-                    
+
                     if (state.blueprint) {
                         updateStage('blueprint', { status: 'completed' });
                     }
-                    
+
                     if (state.generatedFilesMap && Object.keys(state.generatedFilesMap).length > 0) {
                         updateStage('code', { status: 'completed' });
                         if (urlChatId !== 'new') {
@@ -265,12 +300,22 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 const { state } = message;
                 logger.debug('🔄 Agent state update received:', state);
 
-                if (state.shouldBeGenerating) {
+                // Only auto-resume if agent is fully initialized (has blueprint and template)
+                const hasBlueprint = state.blueprint && Object.keys(state.blueprint).length > 0;
+                const hasTemplate = state.templateName && state.templateName.trim() !== '';
+
+                if (state.shouldBeGenerating && hasBlueprint && hasTemplate) {
                     logger.debug('🔄 shouldBeGenerating=true detected, auto-resuming generation');
                     updateStage('code', { status: 'active' });
-                    
+
                     logger.debug('📡 Sending auto-resume generate_all message');
                     sendWebSocketMessage(websocket, 'generate_all');
+                } else if (state.shouldBeGenerating && (!hasBlueprint || !hasTemplate)) {
+                    logger.debug('⏸️ Skipping auto-resume - agent not fully initialized yet', {
+                        hasBlueprint,
+                        hasTemplate,
+                        templateName: state.templateName
+                    });
                 } else {
                     const codeStage = projectStages.find((stage: any) => stage.id === 'code');
                     if (codeStage?.status === 'active' && !isGenerating) {
@@ -297,16 +342,16 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
                 const restoredMessages: ChatMessage[] = [];
                 let currentAssistant: ChatMessage | null = null;
-                
+
                 const ensureToolEvents = (assistant: ChatMessage) => {
                     if (!assistant.ui) assistant.ui = { toolEvents: [] };
                     if (!assistant.ui.toolEvents) assistant.ui.toolEvents = [];
                 };
-                
+
                 for (const msg of history) {
                     const text = extractTextContent(msg.content);
                     if (text?.includes('<Internal Memo>')) continue;
-                    
+
                     if (msg.role === 'user') {
                         restoredMessages.push({
                             role: 'user',
@@ -315,12 +360,12 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         });
                         currentAssistant = null;
                     } else if (msg.role === 'assistant') {
-                        const content = msg.conversationId.startsWith('archive-') 
-                            ? 'previous history was compacted' 
+                        const content = msg.conversationId.startsWith('archive-')
+                            ? 'previous history was compacted'
                             : (text || '');
-                        
+
                         const hasToolCalls = msg.tool_calls && msg.tool_calls.length > 0;
-                        
+
                         // Merge all consecutive assistant messages into one bubble
                         if (currentAssistant) {
                             // Append content if present
@@ -361,18 +406,18 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 // Restore active debug session if one is running
                 if (deepDebugSession?.conversationId) {
                     setIsDebugging(true);
-                    
+
                     // Find if there's already a message with this conversationId
                     const existingMessageIndex = restoredMessages.findIndex(
                         m => m.role === 'assistant' && m.conversationId === deepDebugSession.conversationId
                     );
-                    
+
                     if (existingMessageIndex !== -1) {
                         // Update existing message to show as active debug
                         const existingMessage = restoredMessages[existingMessageIndex];
                         if (!existingMessage.ui) existingMessage.ui = {};
                         if (!existingMessage.ui.toolEvents) existingMessage.ui.toolEvents = [];
-                        
+
                         const debugEventIndex = existingMessage.ui.toolEvents.findIndex(e => e.name === 'deep_debug');
                         if (debugEventIndex === -1) {
                             existingMessage.ui.toolEvents.push({
@@ -407,25 +452,25 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 if (restoredMessages.length > 0) {
                     // Deduplicate assistant messages with identical content (even if separated by tool messages)
                     const deduplicated = deduplicateMessages(restoredMessages);
-                    
+
                     logger.debug('Merging conversation_state with', deduplicated.length, 'messages (', restoredMessages.length - deduplicated.length, 'duplicates removed)');
                     setMessages(prev => {
                         const hasFetching = prev.some(m => m.role === 'assistant' && m.conversationId === 'fetching-chat');
                         const hasReconnect = prev.some(m => m.role === 'assistant' && m.conversationId === 'websocket_reconnected');
-                        
+
                         if (hasFetching) {
-                            const next = appendToolEvent(prev, 'fetching-chat', { 
-                                name: 'fetching your latest conversations', 
-                                status: 'success' 
+                            const next = appendToolEvent(prev, 'fetching-chat', {
+                                name: 'fetching your latest conversations',
+                                status: 'success'
                             });
                             return [...next, ...deduplicated];
                         }
-                        
+
                         if (hasReconnect) {
                             // Preserve reconnect message on top when restoring state after reconnect
                             return [...prev, ...deduplicated];
                         }
-                        
+
                         return deduplicated;
                     });
                 }
@@ -472,6 +517,8 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'generation_started': {
+                // Reset waitingForStoreInfo so the PhaseTimeline becomes visible
+                setWaitingForStoreInfo?.(false);
                 updateStage('code', { status: 'active' });
                 setTotalFiles(message.totalFiles);
                 setIsGenerating(true);
@@ -484,7 +531,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setProjectStages((prev) => completeStages(prev, ['code']));
 
                 sendMessage(createAIMessage('generation-complete', 'Code generation has been completed.'));
-                
+
                 // Reset all phase indicators
                 setIsPhaseProgressActive(false);
                 setIsThinking(false);
@@ -527,11 +574,11 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
             case 'runtime_error_found': {
                 logger.info('Runtime error found in sandbox', message.errors);
-                
+
                 // Update runtime error count
                 deps.setRuntimeErrorCount(message.count || message.errors?.length || 0);
-                
-                onDebugMessage?.('error', 
+
+                onDebugMessage?.('error',
                     `Runtime Error (${message.count} errors)`,
                     message.errors.map((e: any) => `${e.message}\nStack: ${e.stack || 'N/A'}`).join('\n\n'),
                     'Runtime Detection'
@@ -585,7 +632,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'phase_implementing': {
                 sendMessage(createAIMessage('phase_implementing', message.message));
                 updateStage('code', { status: 'active' });
-                
+
                 if (message.phase) {
                     setPhaseTimeline(prev => {
                         const existingPhase = prev.find(p => p.name === message.phase.name);
@@ -593,7 +640,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                             logger.debug('Phase already exists in timeline:', message.phase.name);
                             return prev;
                         }
-                        
+
                         const newPhase = {
                             id: `${message.phase.name}-${Date.now()}`,
                             name: message.phase.name,
@@ -606,7 +653,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                             status: 'generating' as const,
                             timestamp: Date.now()
                         };
-                        
+
                         logger.debug('Added new phase to timeline:', message.phase.name);
                         return [...prev, newPhase];
                     });
@@ -616,7 +663,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
             case 'phase_validating': {
                 sendMessage(createAIMessage('phase_validating', message.message));
-                
+
                 setPhaseTimeline(prev => {
                     const updated = [...prev];
                     if (updated.length > 0) {
@@ -642,7 +689,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 updateStage('code', { status: 'completed' });
                 setIsRedeployReady(true);
                 setIsPhaseProgressActive(false);
-                
+
                 if (message.phase) {
                     setPhaseTimeline(prev => {
                         const updated = [...prev];
@@ -660,11 +707,11 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setTimeout(() => {
                     logger.debug('🔄 Triggering preview refresh after deployment completion');
                     setShouldRefreshPreview(true);
-                    
+
                     setTimeout(() => {
                         setShouldRefreshPreview(false);
                     }, 100);
-                    
+
                     onDebugMessage?.('info',
                         'Preview Auto-Refresh Triggered',
                         `Preview refreshed 1 second after deployment completion`,
@@ -686,16 +733,16 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setIsGenerating(false);
                 setIsGenerationPaused(true);
                 setIsDebugging(false);
-                
+
                 // Reset phase indicators
                 setIsPhaseProgressActive(false);
                 setIsThinking(false);
-                
+
                 // Show toast notification for user-initiated stop
                 toast.info('Generation stopped', {
                     description: message.message || 'Code generation has been stopped'
                 });
-                
+
                 sendMessage(createAIMessage('generation_stopped', message.message));
                 break;
             }
@@ -718,10 +765,10 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setCloudflareDeploymentUrl(message.deploymentUrl);
                 setDeploymentError('');
                 setIsRedeployReady(false);
-                
-                sendMessage(createAIMessage('cloudflare_deployment_completed', `Your project has been permanently deployed to Cloudflare Workers: ${message.deploymentUrl}`));
-                
-                onDebugMessage?.('info', 
+
+                sendMessage(createAIMessage('cloudflare_deployment_completed', `Your store has been deployed successfully: ${message.deploymentUrl}`));
+
+                onDebugMessage?.('info',
                     'Deployment Completed - Redeploy Reset',
                     `Deployment URL: ${message.deploymentUrl}\nPhase count at deployment: ${phaseTimeline.length}\nRedeploy button disabled until next phase`,
                     'Redeployment Management'
@@ -734,12 +781,12 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setDeploymentError(message.error || 'Unknown deployment error');
                 setCloudflareDeploymentUrl('');
                 setIsRedeployReady(true);
-                
+
                 sendMessage(createAIMessage('cloudflare_deployment_error', `❌ Deployment failed: ${message.error}\n\n🔄 You can try deploying again.`));
 
                 toast.error(`Error: ${message.error}`);
-                
-                onDebugMessage?.('error', 
+
+                onDebugMessage?.('error',
                     'Deployment Failed - State Reset',
                     `Error: ${message.error}\nDeployment button reset for retry`,
                     'Deployment Error Recovery'
@@ -766,7 +813,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 sendMessage(createAIMessage('github_export_error', `❌ GitHub export failed: ${message.error}`));
 
                 toast.error(`Error: ${message.error}`);
-                
+
                 break;
             }
 
@@ -792,10 +839,10 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
                 if (message.tool) {
                     const tool = message.tool;
-                    setMessages(prev => appendToolEvent(prev, conversationId, { 
-                        name: tool.name, 
+                    setMessages(prev => appendToolEvent(prev, conversationId, {
+                        name: tool.name,
                         status: tool.status,
-                        result: tool.result 
+                        result: tool.result
                     }));
                     break;
                 }
@@ -808,14 +855,14 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setMessages(prev => {
                     const idx = prev.findIndex(m => m.role === 'assistant' && m.conversationId === conversationId);
                     if (idx !== -1) return prev.map((m, i) => i === idx ? { ...m, content: (isArchive ? placeholder : message.message) } : m);
-                    
+
                     // Deduplicate: Don't add if last assistant message has identical content
                     const newContent = isArchive ? placeholder : message.message;
                     if (isAssistantMessageDuplicate(prev, newContent)) {
                         logger.debug('Skipping duplicate assistant message');
                         return prev; // Skip duplicate
                     }
-                    
+
                     return [...prev, createAIMessage(conversationId, newContent)];
                 });
                 break;
@@ -856,7 +903,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     ...prev,
                     createAIMessage(`error_${Date.now()}`, `❌ ${errorData.error}`)
                 ]);
-                
+
                 onDebugMessage?.(
                     'error',
                     'WebSocket Error',
@@ -875,7 +922,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     onDebugMessage
                 );
                 setMessages(prev => [...prev, rateLimitMessage]);
-                
+
                 break;
             }
 

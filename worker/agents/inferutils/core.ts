@@ -23,6 +23,8 @@ import { SecurityError, RateLimitExceededError } from 'shared/types/errors';
 import { executeToolWithDefinition } from '../tools/customTools';
 import { RateLimitType } from 'worker/services/rate-limit/config';
 import { getMaxToolCallingDepth, MAX_LLM_MESSAGES } from '../constants';
+import Anthropic from '@anthropic-ai/sdk';
+import { zodToJsonSchema } from './zodToJsonSchema';
 
 function optimizeInputs(messages: Message[]): Message[] {
     return messages.map((message) => ({
@@ -469,6 +471,514 @@ async function executeToolCalls(openAiToolCalls: ChatCompletionMessageFunctionTo
     );
 }
 
+/**
+ * Check if a model is a Claude model that should use native Anthropic API
+ */
+function isClaudeModel(modelName: string): boolean {
+    return modelName.includes('claude') || modelName.includes('anthropic');
+}
+
+/**
+ * Extract the Claude model name from provider/model format
+ */
+function extractClaudeModelName(modelName: string): string {
+    // Handle formats like 'anthropic/claude-sonnet-4-5' or '[claude]claude-sonnet-4-5'
+    let name = modelName.replace(/\[.*?\]/, '');
+    if (name.includes('/')) {
+        name = name.split('/')[1];
+    }
+    return name;
+}
+
+/**
+ * Convert OpenAI-style tool definitions to Anthropic's BetaTool format
+ * Adds strict: true for guaranteed schema compliance
+ */
+function convertToolsToAnthropicFormat(tools: ToolDefinition<any, any>[]): Anthropic.Beta.BetaTool[] {
+    return tools.map((tool): Anthropic.Beta.BetaTool => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        input_schema: {
+            type: 'object',
+            properties: (tool.function.parameters as any)?.properties || {},
+            required: (tool.function.parameters as any)?.required || [],
+        },
+        strict: true, // Enable guaranteed schema compliance for tool inputs
+    }));
+}
+
+/**
+ * Execute tool calls from Anthropic's tool_use blocks
+ */
+async function executeAnthropicToolCalls(
+    toolUseBlocks: Anthropic.Beta.BetaToolUseBlock[],
+    originalDefinitions: ToolDefinition<any, any>[]
+): Promise<{
+    id: string;
+    name: string;
+    input: unknown;
+    result: unknown;
+    isError: boolean;
+}[]> {
+    const toolDefinitions = new Map(originalDefinitions.map(td => [td.function.name, td]));
+    
+    return Promise.all(
+        toolUseBlocks.map(async (toolUse) => {
+            try {
+                const td = toolDefinitions.get(toolUse.name);
+                if (!td) {
+                    throw new Error(`Tool ${toolUse.name} not found`);
+                }
+                
+                // Anthropic already parses the input, no need to JSON.parse
+                const args = toolUse.input as Record<string, unknown>;
+                
+                // Call onStart callback if defined
+                if (td.onStart) {
+                    td.onStart(args);
+                }
+                
+                const result = await td.implementation(args);
+                
+                // Call onComplete callback if defined
+                if (td.onComplete) {
+                    td.onComplete(args, result);
+                }
+                
+                console.log(`[AnthropicToolCall] Executed ${toolUse.name}:`, result);
+                
+                return {
+                    id: toolUse.id,
+                    name: toolUse.name,
+                    input: args,
+                    result,
+                    isError: false,
+                };
+            } catch (error) {
+                console.error(`[AnthropicToolCall] Failed to execute ${toolUse.name}:`, error);
+                return {
+                    id: toolUse.id,
+                    name: toolUse.name,
+                    input: toolUse.input,
+                    result: { error: `Failed to execute ${toolUse.name}: ${error instanceof Error ? error.message : 'Unknown error'}` },
+                    isError: true,
+                };
+            }
+        })
+    );
+}
+
+/**
+ * Format tool results for the next Anthropic API call
+ * Tool results go in a user message with tool_result content blocks
+ */
+function formatToolResultsForAnthropic(
+    toolResults: { id: string; result: unknown; isError: boolean }[]
+): Anthropic.Beta.BetaToolResultBlockParam[] {
+    return toolResults.map((tr): Anthropic.Beta.BetaToolResultBlockParam => ({
+        type: 'tool_result',
+        tool_use_id: tr.id,
+        content: typeof tr.result === 'string' ? tr.result : JSON.stringify(tr.result),
+        is_error: tr.isError,
+    }));
+}
+
+/**
+ * Convert internal messages to Anthropic message format
+ */
+function convertToAnthropicMessages(messages: Message[]): {
+    system: string | undefined;
+    messages: Anthropic.MessageParam[];
+} {
+    let systemPrompt: string | undefined;
+    const anthropicMessages: Anthropic.MessageParam[] = [];
+    
+    for (const msg of messages) {
+        if (msg.role === 'system') {
+            // Anthropic handles system messages separately
+            if (typeof msg.content === 'string') {
+                systemPrompt = systemPrompt ? `${systemPrompt}\n\n${msg.content}` : msg.content;
+            } else if (Array.isArray(msg.content)) {
+                const textContent = msg.content
+                    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+                    .map(c => c.text)
+                    .join('\n');
+                systemPrompt = systemPrompt ? `${systemPrompt}\n\n${textContent}` : textContent;
+            }
+            continue;
+        }
+        
+        // Convert content to Anthropic format
+        let content: Anthropic.ContentBlockParam[] | string;
+        
+        if (typeof msg.content === 'string') {
+            content = msg.content;
+        } else if (Array.isArray(msg.content)) {
+            content = msg.content.map((item): Anthropic.ContentBlockParam => {
+                if (item.type === 'text') {
+                    return { type: 'text', text: item.text };
+                } else if (item.type === 'image_url' && item.image_url) {
+                    // Convert OpenAI image format to Anthropic format
+                    const imageUrl = item.image_url.url;
+                    if (imageUrl.startsWith('data:')) {
+                        // Handle base64 data URLs
+                        const matches = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+                        if (matches) {
+                            return {
+                                type: 'image',
+                                source: {
+                                    type: 'base64',
+                                    media_type: matches[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+                                    data: matches[2],
+                                },
+                            };
+                        }
+                    }
+                    // URL-based images
+                    return {
+                        type: 'image',
+                        source: {
+                            type: 'url',
+                            url: imageUrl,
+                        },
+                    };
+                }
+                // Default to text block
+                return { type: 'text', text: JSON.stringify(item) };
+            });
+        } else {
+            content = '';
+        }
+        
+        const role = msg.role === 'assistant' ? 'assistant' : 'user';
+        anthropicMessages.push({ role, content });
+    }
+    
+    // Anthropic requires alternating user/assistant messages
+    // Merge consecutive messages of the same role
+    const mergedMessages: Anthropic.MessageParam[] = [];
+    for (const msg of anthropicMessages) {
+        if (mergedMessages.length === 0 || mergedMessages[mergedMessages.length - 1].role !== msg.role) {
+            mergedMessages.push(msg);
+        } else {
+            // Merge with previous message of same role
+            const prev = mergedMessages[mergedMessages.length - 1];
+            if (typeof prev.content === 'string' && typeof msg.content === 'string') {
+                prev.content = `${prev.content}\n\n${msg.content}`;
+            } else {
+                // Convert to array and merge
+                const prevContent = typeof prev.content === 'string' 
+                    ? [{ type: 'text' as const, text: prev.content }] 
+                    : prev.content;
+                const msgContent = typeof msg.content === 'string'
+                    ? [{ type: 'text' as const, text: msg.content }]
+                    : msg.content;
+                prev.content = [...prevContent, ...msgContent] as Anthropic.ContentBlockParam[];
+            }
+        }
+    }
+    
+    return { system: systemPrompt, messages: mergedMessages };
+}
+
+/**
+ * Perform inference using Anthropic's native API with structured outputs and tool calling
+ * Uses the beta structured-outputs feature for guaranteed schema compliance
+ * 
+ * See: https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+ */
+async function inferWithAnthropicNative<OutputSchema extends z.AnyZodObject>({
+    env,
+    metadata,
+    messages,
+    schema,
+    schemaName,
+    modelName,
+    maxTokens,
+    temperature,
+    stream,
+    tools,
+    actionKey,
+    toolCallContext,
+}: {
+    env: Env;
+    metadata: InferenceMetadata;
+    messages: Message[];
+    schema?: OutputSchema;
+    schemaName?: string;
+    modelName: string;
+    maxTokens?: number;
+    temperature?: number;
+    stream?: {
+        chunk_size: number;
+        onChunk: (chunk: string) => void;
+    };
+    tools?: ToolDefinition<any, any>[];
+    actionKey: AgentActionKey | 'testModelConfig';
+    toolCallContext?: ToolCallContext;
+}): Promise<InferResponseObject<OutputSchema> | InferResponseString> {
+    const apiKey = env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+        throw new Error('ANTHROPIC_API_KEY is required for Claude native API');
+    }
+    
+    const client = new Anthropic({ apiKey });
+    const claudeModelName = extractClaudeModelName(modelName);
+    
+    // Convert messages to Anthropic format
+    const { system, messages: anthropicMessages } = convertToAnthropicMessages(messages);
+    
+    // Convert tools to Anthropic format with strict: true
+    const anthropicTools = tools ? convertToolsToAnthropicFormat(tools) : undefined;
+    
+    // Build JSON Schema from Zod schema for structured output
+    const outputFormat = schema ? {
+        type: 'json_schema' as const,
+        schema: zodToJsonSchema(schema),
+    } : undefined;
+    
+    const hasTools = anthropicTools && anthropicTools.length > 0;
+    
+    console.log(`[ClaudeNative] Using native Anthropic API`);
+    console.log(`[ClaudeNative] Model: ${claudeModelName}, Schema: ${schemaName || 'none'}, Tools: ${hasTools ? anthropicTools.length : 0}`);
+    
+    // Track conversation for tool calling loop
+    // Use BetaMessageParam type for compatibility with beta API features
+    let currentMessages: Anthropic.Beta.BetaMessageParam[] = anthropicMessages.map(msg => ({
+        role: msg.role,
+        content: msg.content as Anthropic.Beta.BetaContentBlockParam[] | string,
+    }));
+    const currentDepth = toolCallContext?.depth ?? 0;
+    const maxDepth = getMaxToolCallingDepth(actionKey);
+    
+    try {
+        // Tool calling loop - continue until we get a final response or hit max depth
+        let iterationCount = 0;
+        const maxIterations = maxDepth - currentDepth;
+        
+        while (iterationCount < maxIterations) {
+            iterationCount++;
+            
+            // Build the API request
+            const requestParams: Anthropic.Beta.MessageCreateParams = {
+                model: claudeModelName,
+                max_tokens: maxTokens || 16000,
+                temperature: temperature,
+                messages: currentMessages,
+                betas: ['structured-outputs-2025-11-13'],
+            };
+            
+            // Add system prompt if present
+            if (system) {
+                requestParams.system = system;
+            }
+            
+            // Add tools if present
+            if (hasTools) {
+                requestParams.tools = anthropicTools;
+            }
+            
+            // Add output format for structured output (only if no tools or on final response)
+            // Note: When tools are present, we let Claude use tools first, then format final response
+            if (outputFormat && !hasTools) {
+                requestParams.output_format = outputFormat;
+            }
+            
+            console.log(`[ClaudeNative] Making API call (iteration ${iterationCount}/${maxIterations})`);
+            
+            // Use streaming to avoid 10-minute timeout limitation
+            // See: https://github.com/anthropics/anthropic-sdk-typescript#long-requests
+            const messageStream = client.beta.messages.stream(requestParams);
+            
+            // If stream callback provided, forward text chunks
+            if (stream) {
+                let streamBuffer = '';
+                messageStream.on('text', (text) => {
+                    streamBuffer += text;
+                    if (streamBuffer.length >= stream.chunk_size) {
+                        stream.onChunk(streamBuffer);
+                        streamBuffer = '';
+                    }
+                });
+            }
+            
+            const response = await messageStream.finalMessage();
+            
+            console.log(`[ClaudeNative] Response received, stop_reason: ${response.stop_reason}`);
+            
+            // Check for refusal
+            if (response.stop_reason === 'refusal') {
+                throw new Error('Claude refused to generate response for safety reasons');
+            }
+            
+            // Check for max_tokens cutoff
+            if (response.stop_reason === 'max_tokens') {
+                console.warn('[ClaudeNative] Response was cut off due to max_tokens limit');
+            }
+            
+            // Extract tool use blocks
+            const toolUseBlocks = response.content.filter(
+                (block): block is Anthropic.Beta.BetaToolUseBlock => block.type === 'tool_use'
+            );
+            
+            // Extract text content
+            const textBlocks = response.content.filter(
+                (block): block is Anthropic.Beta.BetaTextBlock => block.type === 'text'
+            );
+            const textContent = textBlocks.map(block => block.text).join('');
+            
+            // If there are tool calls, execute them and continue the loop
+            if (toolUseBlocks.length > 0 && tools) {
+                console.log(`[ClaudeNative] Executing ${toolUseBlocks.length} tool calls`);
+                
+                const toolResults = await executeAnthropicToolCalls(toolUseBlocks, tools);
+                const toolResultBlocks = formatToolResultsForAnthropic(toolResults);
+                
+                // Add assistant response with tool_use blocks to conversation
+                // Convert response content to BetaContentBlockParam format
+                const assistantContent: Anthropic.Beta.BetaContentBlockParam[] = response.content.map(block => {
+                    if (block.type === 'text') {
+                        return { type: 'text' as const, text: block.text };
+                    } else if (block.type === 'tool_use') {
+                        return {
+                            type: 'tool_use' as const,
+                            id: block.id,
+                            name: block.name,
+                            input: block.input,
+                        };
+                    }
+                    // Fallback for other types
+                    return { type: 'text' as const, text: JSON.stringify(block) };
+                });
+                
+                currentMessages.push({
+                    role: 'assistant',
+                    content: assistantContent,
+                });
+                
+                // Add user message with tool results
+                currentMessages.push({
+                    role: 'user',
+                    content: toolResultBlocks as Anthropic.Beta.BetaContentBlockParam[],
+                });
+                
+                // Check if any tools returned meaningful results
+                const hasResults = toolResults.some(tr => tr.result && !tr.isError);
+                if (!hasResults) {
+                    console.log('[ClaudeNative] No tool results, continuing...');
+                }
+                
+                // Continue the loop to get the next response
+                continue;
+            }
+            
+            // No tool calls - this is the final response
+            if (stream) {
+                stream.onChunk(textContent);
+            }
+            
+            // If we have a schema, parse and validate the response
+            if (schema && schemaName) {
+                // If tools were used, we need to make one more call with output_format
+                // to get properly structured output
+                if (hasTools && textContent) {
+                    console.log(`[ClaudeNative] Making final structured output call`);
+                    
+                    // Add the final response to messages and ask for structured output
+                    currentMessages.push({
+                        role: 'assistant',
+                        content: textContent,
+                    });
+                    currentMessages.push({
+                        role: 'user',
+                        content: 'Please provide your response in the required JSON format.',
+                    });
+                    
+                    // Use streaming for final structured output call
+                    const structuredStream = client.beta.messages.stream({
+                        model: claudeModelName,
+                        max_tokens: maxTokens || 16000,
+                        temperature: temperature,
+                        system: system,
+                        messages: currentMessages,
+                        betas: ['structured-outputs-2025-11-13'],
+                        output_format: outputFormat,
+                    });
+                    const structuredResponse = await structuredStream.finalMessage();
+                    
+                    const finalTextContent = structuredResponse.content
+                        .filter((block): block is Anthropic.Beta.BetaTextBlock => block.type === 'text')
+                        .map(block => block.text)
+                        .join('');
+                    
+                    const parsedContent = JSON.parse(finalTextContent);
+                    const result = schema.safeParse(parsedContent);
+                    
+                    if (!result.success) {
+                        console.error('[ClaudeNative] Schema validation failed:', result.error.format());
+                        throw new InferError(
+                            `Anthropic structured output failed schema validation: ${result.error.message}`,
+                            finalTextContent
+                        );
+                    }
+                    
+                    console.log(`[ClaudeNative] Successfully validated structured response`);
+                    return { object: result.data, toolCallContext };
+                }
+                
+                // Direct structured output (no tools were called)
+                try {
+                    const parsedContent = JSON.parse(textContent);
+                    const result = schema.safeParse(parsedContent);
+                    
+                    if (!result.success) {
+                        console.error('[ClaudeNative] Schema validation failed:', result.error.format());
+                        throw new InferError(
+                            `Anthropic structured output failed schema validation: ${result.error.message}`,
+                            textContent
+                        );
+                    }
+                    
+                    console.log(`[ClaudeNative] Successfully validated response against schema`);
+                    return { object: result.data, toolCallContext };
+                } catch (parseError) {
+                    if (parseError instanceof InferError) throw parseError;
+                    console.error('[ClaudeNative] Failed to parse JSON response:', parseError);
+                    throw new InferError('Failed to parse structured response', textContent);
+                }
+            }
+            
+            // No schema - return as string
+            console.log(`[ClaudeNative] Returning string response`);
+            return { string: textContent, toolCallContext };
+        }
+        
+        // Max iterations reached
+        console.warn(`[ClaudeNative] Max tool calling depth reached (${maxIterations})`);
+        throw new AbortError(`Maximum tool calling depth (${maxDepth}) exceeded`, toolCallContext);
+        
+    } catch (error) {
+        if (error instanceof Anthropic.APIError) {
+            console.error(`[ClaudeNative] Anthropic API error:`, {
+                status: error.status,
+                message: error.message,
+            });
+            
+            // Handle specific error cases
+            if (error.status === 400) {
+                throw new Error(`Anthropic API error: ${error.message}`);
+            }
+            if (error.status === 429) {
+                throw new RateLimitExceededError(
+                    'Rate limit exceeded for Anthropic API',
+                    RateLimitType.LLM_CALLS
+                );
+            }
+        }
+        throw error;
+    }
+}
+
 export function infer<OutputSchema extends z.AnyZodObject>(
     args: InferArgsStructured,
     toolCallContext?: ToolCallContext,
@@ -531,8 +1041,50 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
         // Maybe in the future can expand using config object for other stuff like global model configs?
         await RateLimitService.enforceLLMCallsRateLimit(env, userConfig.security.rateLimit, metadata.userId, modelName)
 
+        // Route Claude models to native Anthropic API for:
+        // - Structured output with guaranteed schema compliance via constrained decoding
+        // - Tool calling with strict: true for guaranteed input schema compliance
+        // Only skip when using custom format (which uses prompt-based schema)
+        const useNativeAnthropicAPI = 
+            isClaudeModel(modelName) && 
+            !format && // Custom format uses prompt-based approach
+            env.ANTHROPIC_API_KEY &&
+            (schema || tools); // Either structured output or tool calling
+        
+        if (useNativeAnthropicAPI) {
+            const hasTools = tools && tools.length > 0;
+            const hasSchema = schema && schemaName;
+            console.log(`[ModelCall] Routing Claude model to native Anthropic API (schema: ${hasSchema}, tools: ${hasTools})`);
+            
+            try {
+                const result = await inferWithAnthropicNative<OutputSchema>({
+                    env,
+                    metadata,
+                    messages: optimizeInputs(messages),
+                    schema: schema as OutputSchema | undefined,
+                    schemaName,
+                    modelName,
+                    maxTokens,
+                    temperature,
+                    stream,
+                    tools,
+                    actionKey,
+                    toolCallContext,
+                });
+                return result;
+            } catch (anthropicError) {
+                // If Anthropic native API fails (e.g., schema incompatibility), 
+                // fall back to OpenAI SDK approach
+                console.warn(`[ModelCall] Anthropic native API failed, falling back to OpenAI SDK:`, 
+                    anthropicError instanceof Error ? anthropicError.message : String(anthropicError));
+                // Continue to OpenAI SDK approach below
+            }
+        }
+
         const { apiKey, baseURL, defaultHeaders } = await getConfigurationForModel(modelName, env, metadata.userId);
-        console.log(`baseUrl: ${baseURL}, modelName: ${modelName}`);
+        const provider = modelName.split('/')[0].replace(/\[.*?\]/, '');
+        const hasApiKey = apiKey && apiKey.length > 0;
+        console.log(`[ModelCall] Provider: ${provider}, Model: ${modelName}, BaseURL: ${baseURL}, HasApiKey: ${hasApiKey}, ApiKeyPrefix: ${hasApiKey ? apiKey.substring(0, 10) + '...' : 'MISSING'}`);
 
         // Remove [*.] from model name
         modelName = modelName.replace(/\[.*?\]/, '');
@@ -542,7 +1094,10 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             schema && schemaName && !format
                 ? { response_format: zodResponseFormat(schema, schemaName) }
                 : {};
-        const extraBody = modelName.includes('claude')? {
+        // Only add Claude thinking parameters when calling Anthropic directly (not through AI Gateway)
+        // AI Gateway's /compat endpoint doesn't support Anthropic-specific extra_body parameters
+        const isDirectAnthropicCall = baseURL.includes('api.anthropic.com');
+        const extraBody = modelName.includes('claude') && isDirectAnthropicCall ? {
                     extra_body: {
                         thinking: {
                             type: 'enabled',
@@ -551,6 +1106,10 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     },
                 }
             : {};
+        
+        if (modelName.includes('claude')) {
+            console.log(`[ClaudeCall] DirectCall: ${isDirectAnthropicCall}, ThinkingEnabled: ${!!extraBody.extra_body}, BaseURL: ${baseURL}`);
+        }
 
         // Optimize messages to reduce token count
         const optimizedMessages = optimizeInputs(messages);
@@ -610,8 +1169,8 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
             }
         }
 
-        // gpt-5.1 only supports temperature 1
-        const finalTemperature = modelName.includes('gpt-5.1') ? 1 : temperature;
+        // gpt-5.1 and gpt-5.2 only support temperature 1
+        const finalTemperature = (modelName.includes('gpt-5.1') || modelName.includes('gpt-5.2')) ? 1 : temperature;
 
         console.log(`Running inference with ${modelName} using structured output with ${format} format, reasoning effort: ${reasoning_effort}, max tokens: ${maxTokens}, temperature: ${finalTemperature}, baseURL: ${baseURL}`);
 
@@ -653,7 +1212,19 @@ export async function infer<OutputSchema extends z.AnyZodObject>({
                     throw new AbortError('**User cancelled inference**', toolCallContext);
                 }
                 
-                console.error(`Failed to get inference response from OpenAI: ${error}`);
+                // Enhanced error logging for model call failures
+                const errorInfo = {
+                    model: modelName,
+                    provider,
+                    baseURL,
+                    errorName: error instanceof Error ? error.name : 'Unknown',
+                    errorMessage: error instanceof Error ? error.message : String(error),
+                    httpStatus: (error as any)?.status || (error as any)?.statusCode || 'N/A',
+                    errorType: (error as any)?.type || 'N/A',
+                    errorCode: (error as any)?.code || 'N/A',
+                };
+                console.error(`[ModelCallError] Failed to call ${modelName}:`, JSON.stringify(errorInfo, null, 2));
+                
                 if ((error instanceof Error && error.message.includes('429')) || (typeof error === 'string' && error.includes('429'))) {
                     throw new RateLimitExceededError('Rate limit exceeded in LLM calls, Please try again later', RateLimitType.LLM_CALLS);
                 }

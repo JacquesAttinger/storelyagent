@@ -60,39 +60,58 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 		 * Returns preview type if accessible, null otherwise
 		 */
 		const testAvailability = useCallback(async (url: string): Promise<'sandbox' | 'dispatcher' | null> => {
+			// First, try with CORS to read headers (works for hosted deployments through worker)
 			try {
 				const response = await fetch(url, {
 					method: 'HEAD',
-					mode: 'cors', // Using CORS to read security-validated headers
+					mode: 'cors',
 					cache: 'no-cache',
 					signal: AbortSignal.timeout(8000),
 				});
-                console.log('Preview availability test response:', response, response.headers.forEach((value, key) => console.log("Header: ",key, value)));
+				console.log('[Preview] CORS request succeeded, status:', response.status);
 				
 				if (!response.ok) {
-					console.log('Preview not ready (status:', response.status, ')');
+					console.log('[Preview] Not ready (status:', response.status, ')');
 					return null;
 				}
 				
 				// Read the custom header to determine preview type
-				// Header will only be present if origin validation passed on server
 				const previewType = response.headers.get('X-Preview-Type');
 				
-                if (previewType === 'sandbox-error') {
-                    console.log('Preview not ready (sandbox error)');
-                    return null;
-                } else if (previewType === 'sandbox' || previewType === 'dispatcher') {
-					console.log('Preview available, type:', previewType);
+				if (previewType === 'sandbox-error') {
+					console.log('[Preview] Not ready (sandbox error)');
+					return null;
+				} else if (previewType === 'sandbox' || previewType === 'dispatcher') {
+					console.log('[Preview] Available via CORS, type:', previewType);
 					return previewType;
 				}
 				
-				// Fallback: If no header present (shouldn't happen with valid origin)
-				// but the response is OK, assume sandbox for backward compatibility
-				console.log('Preview available (type unknown, assuming sandbox)');
+				// Fallback: If no header present but response is OK
+				console.log('[Preview] Available (type unknown, assuming sandbox)');
 				return 'sandbox';
-			} catch (error) {
-				console.log('Preview not available yet:', error);
-				return null;
+			} catch (corsError) {
+				// CORS might fail for trycloudflare.com tunnels - try no-cors fallback
+				console.log('[Preview] CORS request failed, trying no-cors fallback:', corsError);
+				
+				try {
+					// With no-cors, we get an opaque response - can't read status/headers
+					// But if the request doesn't throw, the server is responding
+					const response = await fetch(url, {
+						method: 'HEAD',
+						mode: 'no-cors',
+						cache: 'no-cache',
+						signal: AbortSignal.timeout(8000),
+					});
+					
+					// Opaque responses have type 'opaque' and status 0
+					// If we get here without throwing, the server is up
+					console.log('[Preview] no-cors request succeeded (opaque response), assuming server is ready');
+					return 'sandbox'; // Assume sandbox for tunnel URLs
+				} catch (noCorsError) {
+					// Server is truly not available
+					console.log('[Preview] no-cors request also failed, server not available:', noCorsError);
+					return null;
+				}
 			}
 		}, []);
 

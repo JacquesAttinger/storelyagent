@@ -10,7 +10,11 @@ import tailwindcss from '@tailwindcss/vite';
 // https://vite.dev/config/
 export default defineConfig({
 	optimizeDeps: {
-		exclude: ['format', 'editor.all'],
+		exclude: [
+			'format', 
+			'editor.all',
+			'@modelcontextprotocol/sdk', // Exclude MCP SDK from pre-bundling (used in Worker, not browser)
+		],
 		include: ['monaco-editor/esm/vs/editor/editor.api'],
 		force: true,
 	},

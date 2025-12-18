@@ -6,6 +6,8 @@ import { FileProcessing } from '../../domain/pure/FileProcessing';
 import { FileState } from 'worker/agents/core/state';
 import { TemplateDetails } from '../../../services/sandbox/sandboxTypes';
 import { GitVersionControl } from 'worker/agents/git';
+import { isBackendReadOnlyFile } from 'worker/services/sandbox/utils';
+import { dumpFilesToLocal, logFileDumpLocation } from '../../utils/fileDump';
 
 /**
  * Manages file operations for code generation
@@ -29,20 +31,20 @@ export class FileManager implements IFileManager {
      */
     private async syncGeneratedFilesMapFromGit(): Promise<void> {
         console.log('[FileManager] Auto-syncing generatedFilesMap from git HEAD');
-        
+
         try {
             // Get all files from HEAD commit
             const gitFiles = await this.git.getAllFilesFromHead();
-            
+
             // Get old map to preserve purposes
             const oldMap = this.stateManager.getState().generatedFilesMap;
-            
+
             // Build new map, preserving existing purposes
             const newMap: Record<string, FileState> = {};
-            
+
             for (const file of gitFiles) {
                 const existing = oldMap[file.filePath];
-                
+
                 newMap[file.filePath] = {
                     filePath: file.filePath,
                     fileContents: file.fileContents,
@@ -50,13 +52,13 @@ export class FileManager implements IFileManager {
                     lastDiff: ''
                 };
             }
-            
+
             // Update state
             this.stateManager.setState({
                 ...this.stateManager.getState(),
                 generatedFilesMap: newMap
             });
-            
+
             console.log('[FileManager] Sync complete', {
                 filesCount: Object.keys(newMap).length,
                 preservedPurposes: Object.values(newMap).filter(f => oldMap[f.filePath]?.filePurpose).length
@@ -95,14 +97,28 @@ export class FileManager implements IFileManager {
     async saveGeneratedFiles(files: FileOutputType[], commitMessage?: string): Promise<FileState[]> {
         const filesMap = { ...this.stateManager.getState().generatedFilesMap };
         const fileStates: FileState[] = [];
-        
-        for (const file of files) {
+
+        // Filter out backend read-only files
+        const frontendFiles = files.filter(file => {
+            if (isBackendReadOnlyFile(file.filePath)) {
+                console.warn(`[FileManager] Attempted to save read-only file: ${file.filePath}. Backend (api-worker/), worker routes, and admin dashboard (admin-app/) are read-only and automatically deployed. Only files in storefront-app/ can be modified.`);
+                return false;
+            }
+            return true;
+        });
+
+        if (frontendFiles.length === 0 && files.length > 0) {
+            console.warn('[FileManager] No frontend files to save after filtering read-only files. All provided files were in read-only directories.');
+            return [];
+        }
+
+        for (const file of frontendFiles) {
             let lastDiff = '';
             const oldFile = filesMap[file.filePath];
-            
+
             // Get comparison base: from generatedFilesMap, template/filesystem, or empty string for new files
             const oldFileContents = oldFile?.fileContents ?? (this.getFile(file.filePath)?.fileContents || '');
-            
+
             // Generate diff if contents changed
             if (oldFileContents !== file.fileContents) {
                 try {
@@ -111,7 +127,7 @@ export class FileManager implements IFileManager {
                     console.error(`Failed to generate diff for file ${file.filePath}:`, error);
                 }
             }
-            
+
             const fileState = {
                 ...file,
                 lasthash: '',
@@ -122,7 +138,7 @@ export class FileManager implements IFileManager {
             filesMap[file.filePath] = fileState;
             fileStates.push(fileState);
         }
-        
+
         this.stateManager.setState({
             ...this.stateManager.getState(),
             generatedFilesMap: filesMap
@@ -150,11 +166,11 @@ export class FileManager implements IFileManager {
 
     deleteFiles(filePaths: string[]): void {
         const newFilesMap = { ...this.stateManager.getState().generatedFilesMap };
-        
+
         for (const filePath of filePaths) {
             delete newFilesMap[filePath];
         }
-        
+
         this.stateManager.setState({
             ...this.stateManager.getState(),
             generatedFilesMap: newFilesMap
@@ -180,7 +196,7 @@ export class FileManager implements IFileManager {
         return Object.values(state.generatedFilesMap);
     }
 
-    getTemplateFile(filePath: string) : FileOutputType | null {
+    getTemplateFile(filePath: string): FileOutputType | null {
         try {
             const templateDetails = this.getTemplateDetailsFunc();
             const fileContents = templateDetails.allFiles[filePath];
@@ -198,7 +214,7 @@ export class FileManager implements IFileManager {
         }
     }
 
-    getFile(filePath: string) : FileOutputType | null {
+    getFile(filePath: string): FileOutputType | null {
         // First search generated files
         const generatedFile = this.getGeneratedFile(filePath);
         if (generatedFile) {
@@ -206,5 +222,20 @@ export class FileManager implements IFileManager {
         }
         // Then search template files
         return this.getTemplateFile(filePath);
+    }
+
+    /**
+     * Dump all generated files to local filesystem for development visibility
+     * Creates files in ./output/<projectName>-<agentId>/
+     */
+    async dumpToLocal(agentId: string, projectName: string): Promise<void> {
+        const files = this.getGeneratedFiles();
+        if (files.length === 0) {
+            console.log('[FileManager] No files to dump locally');
+            return;
+        }
+
+        const outputPath = await dumpFilesToLocal(agentId, projectName, files);
+        logFileDumpLocation(outputPath);
     }
 }

@@ -49,3 +49,6 @@ debug-tools/*.json
 .env.sentry-build-plugin
 data-dump
 debug-tools/extracted
+
+# Generated store files (local dump for development)
+output/
