@@ -10,6 +10,7 @@ import AppsPage from './routes/apps';
 import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
 import AdminDashboard from './routes/admin';
+import DocsPage from './routes/docs';
 import { ProtectedRoute } from './routes/protected-route';
 
 const routes = [
@@ -48,6 +49,10 @@ const routes = [
 			{
 				path: 'admin',
 				element: React.createElement(ProtectedRoute, { children: React.createElement(AdminDashboard) }),
+			},
+			{
+				path: 'docs',
+				Component: DocsPage,
 			},
 		],
 	},

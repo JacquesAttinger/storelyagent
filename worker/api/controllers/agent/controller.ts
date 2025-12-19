@@ -38,7 +38,7 @@ export class CodingAgentController extends BaseController {
     /**
      * Start the incremental code generation process
      */
-    static async startCodeGeneration(request: Request, env: Env, _: ExecutionContext, context: RouteContext): Promise<Response> {
+    static async startCodeGeneration(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<Response> {
         try {
             this.logger.info('Starting code generation process');
 
@@ -181,11 +181,26 @@ export class CodingAgentController extends BaseController {
                 initArgs,
                 body.agentMode || defaultCodeGenArgs.agentMode
             ) as Promise<CodeGenState>;
-            agentPromise.then(async (_state: CodeGenState) => {
-                writer.write("terminate");
-                writer.close();
-                this.logger.info(`Agent ${agentId} terminated successfully`);
-            });
+
+            // Keep background work alive with ctx.waitUntil()
+            // This is critical for Cloudflare Workers - without it, the runtime
+            // may terminate background work and report "Worker's code had hung"
+            ctx.waitUntil(
+                agentPromise.then(async (_state: CodeGenState) => {
+                    writer.write("terminate");
+                    writer.close();
+                    this.logger.info(`Agent ${agentId} terminated successfully`);
+                }).catch((error) => {
+                    this.logger.error(`Agent ${agentId} initialization failed`, error);
+                    try {
+                        writer.write({ error: 'Initialization failed' });
+                        writer.close();
+                    } catch (writeError) {
+                        // Writer may already be closed
+                        this.logger.warn(`Failed to write error to stream for agent ${agentId}`, writeError);
+                    }
+                })
+            );
 
             this.logger.info(`Agent ${agentId} init launched successfully`);
 
