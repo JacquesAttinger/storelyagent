@@ -147,7 +147,7 @@ export default function Home() {
 							discoverReady ? "mt-48" : "mt-[20vh] sm:mt-[24vh] md:mt-[28vh]"
 						)}>
 						<h1 className="text-accent font-medium leading-[1.1] tracking-tight text-5xl w-full mb-4 bg-clip-text bg-gradient-to-r from-text-primary to-text-primary/90">
-							What store should we build?
+							The fastest way to start selling online
 						</h1>
 
 						<form
@@ -175,7 +175,7 @@ export default function Home() {
 									className="w-full resize-none ring-0 z-20 outline-0 placeholder:text-text-primary/60 text-text-primary"
 									name="query"
 									value={query}
-									placeholder={`Create a ${currentPlaceholderText}`}
+									placeholder={`Sell ${currentPlaceholderText}`}
 									ref={textareaRef}
 									onChange={(e) => {
 										setQuery(e.target.value);

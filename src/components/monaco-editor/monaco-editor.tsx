@@ -173,14 +173,11 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 
 
 	useEffect(() => {
-		let configuredTheme = theme;
-		if (theme === 'system') {
-			configuredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-		}
+		// Always use light theme
 		editor.current = monaco.editor.create(containerRef.current!, {
 			language: createOptions.language || 'typescript',
 			minimap: { enabled: false },
-			theme: configuredTheme === 'dark' ? 'v1-dev-dark' : 'v1-dev',
+			theme: 'v1-dev',
 			automaticLayout: true,
 			value: defaultCode,
 			fontSize: 13,
@@ -290,10 +287,10 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 		);
 	}, [find, replace]);
 
-	// Update theme when app theme changes
+	// Theme is always light
 	useEffect(() => {
 		if (editor.current) {
-			monaco.editor.setTheme(theme === 'dark' ? 'v1-dev-dark' : 'v1-dev');
+			monaco.editor.setTheme('v1-dev');
 		}
 	}, [theme]);
 
