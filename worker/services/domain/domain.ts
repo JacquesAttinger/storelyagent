@@ -19,10 +19,27 @@ export interface DomainSuggestion {
     available: boolean;
 }
 
+export interface DomainConnectSettings {
+    providerId: string;
+    providerName: string;
+    providerDisplayName?: string;
+    urlSyncUX?: string;
+    urlAsyncUX?: string;
+    urlAPI?: string;
+}
+
+export interface DomainConnectSupport {
+    settings: DomainConnectSettings;
+    templateSupported: boolean;
+}
+
 /**
  * Domain Service for checking availability
  */
 export class DomainService {
+    private readonly domainConnectServiceId = 'website';
+    private readonly domainConnectProviderId = 'storelyshop.com';
+
     /**
      * Check if a domain is available using DNS lookup
      * If DNS resolution fails, domain is likely available
@@ -71,17 +88,17 @@ export class DomainService {
     }
 
     /**
-     * Get the Namecheap purchase URL for a domain
+     * Get a purchase URL for a domain
      */
     getPurchaseUrl(domain: string): string {
         const normalizedDomain = this.normalizeDomain(domain);
-        return `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(normalizedDomain)}`;
+        return `https://www.name.com/domain/search/${encodeURIComponent(normalizedDomain)}`;
     }
 
     /**
      * Normalize domain name
      */
-    private normalizeDomain(domain: string): string {
+    normalizeDomain(domain: string): string {
         let normalized = domain.toLowerCase().trim();
 
         // Remove protocol if present
@@ -99,10 +116,55 @@ export class DomainService {
     /**
      * Validate domain format
      */
-    private isValidDomain(domain: string): boolean {
+    isValidDomain(domain: string): boolean {
         // Basic domain validation regex
         const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z]{2,})+$/;
         return domainRegex.test(domain);
+    }
+
+    /**
+     * Discover Domain Connect settings for a domain, if supported by its DNS provider
+     */
+    async discoverDomainConnect(domain: string): Promise<DomainConnectSupport | null> {
+        const normalizedDomain = this.normalizeDomain(domain);
+        if (!this.isValidDomain(normalizedDomain)) {
+            return null;
+        }
+
+        const domainConnectHost = await this.getDomainConnectHost(normalizedDomain);
+        if (!domainConnectHost) {
+            return null;
+        }
+
+        const settings = await this.fetchDomainConnectSettings(domainConnectHost, normalizedDomain);
+        if (!settings) {
+            return null;
+        }
+
+        const templateSupported = await this.isDomainConnectTemplateSupported(settings);
+        return { settings, templateSupported };
+    }
+
+    /**
+     * Build a Domain Connect apply URL for our template
+     */
+    buildDomainConnectApplyUrl(
+        settings: DomainConnectSettings,
+        domain: string,
+        targetHost: string
+    ): string | null {
+        if (!settings.urlSyncUX) {
+            return null;
+        }
+
+        const applyUrl = new URL(
+            `${settings.urlSyncUX}/v2/domainTemplates/providers/${this.domainConnectProviderId}/services/${this.domainConnectServiceId}/apply`
+        );
+
+        applyUrl.searchParams.set('domain', domain);
+        applyUrl.searchParams.set('TARGET', targetHost);
+
+        return applyUrl.toString();
     }
 
     /**
@@ -143,6 +205,92 @@ export class DomainService {
             return true;
         } catch (error) {
             logger.warn('DNS check failed, assuming unavailable', { domain, error });
+            return false;
+        }
+    }
+
+    private async getDomainConnectHost(domain: string): Promise<string | null> {
+        const recordName = `__domainconnect_.${domain}`;
+
+        try {
+            const response = await fetch(
+                `https://cloudflare-dns.com/dns-query?name=${recordName}&type=TXT`,
+                {
+                    headers: {
+                        'Accept': 'application/dns-json'
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const data = await response.json() as { Answer?: Array<{ data?: string }> };
+            const answer = data.Answer?.find(entry => entry.data);
+            if (!answer?.data) {
+                return null;
+            }
+
+            return answer.data.replace(/"/g, '').trim();
+        } catch (error) {
+            logger.warn('Domain Connect TXT lookup failed', { domain, error });
+            return null;
+        }
+    }
+
+    private async fetchDomainConnectSettings(
+        domainConnectHost: string,
+        domain: string
+    ): Promise<DomainConnectSettings | null> {
+        try {
+            const response = await fetch(
+                `https://${domainConnectHost}/v2/${domain}/settings`,
+                {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const data = await response.json() as DomainConnectSettings;
+            if (!data.providerId || !data.providerName) {
+                return null;
+            }
+
+            return data;
+        } catch (error) {
+            logger.warn('Domain Connect settings lookup failed', { domain, error });
+            return null;
+        }
+    }
+
+    private async isDomainConnectTemplateSupported(settings: DomainConnectSettings): Promise<boolean> {
+        if (!settings.urlAPI) {
+            return false;
+        }
+
+        try {
+            const response = await fetch(
+                `${settings.urlAPI}/v2/domainTemplates/providers/${this.domainConnectProviderId}/services/${this.domainConnectServiceId}`,
+                {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                }
+            );
+
+            if (response.status === 404) {
+                return false;
+            }
+
+            return response.ok;
+        } catch (error) {
+            logger.warn('Domain Connect template support check failed', { error });
             return false;
         }
     }

@@ -18,7 +18,7 @@ export function setupDomainRoutes(app: Hono<AppEnv>): void {
         adaptController(DomainController, DomainController.checkAvailability)
     );
 
-    // Get Namecheap purchase URL (public)
+    // Get purchase URL (public)
     domainRouter.get(
         '/purchase-url',
         setAuthLevel(AuthConfig.public),
@@ -37,6 +37,13 @@ export function setupDomainRoutes(app: Hono<AppEnv>): void {
         '/',
         setAuthLevel(AuthConfig.authenticated),
         adaptController(DomainController, DomainController.addDomain)
+    );
+
+    // Start domain connect flow (authenticated)
+    domainRouter.post(
+        '/connect',
+        setAuthLevel(AuthConfig.authenticated),
+        adaptController(DomainController, DomainController.connectDomain)
     );
 
     // Link domain to store (authenticated)

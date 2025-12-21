@@ -1,6 +1,6 @@
 /**
  * Domain Settings Card Component
- * Allows users to check domain availability, buy on Namecheap, and link to their stores
+ * Allows users to check domain availability, buy a domain, and connect domains to stores
  */
 
 import { useState, useEffect } from 'react';
@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api-client';
-import type { UserDomainData, DomainCheckData, AppsListData } from '@/api-types';
+import type { UserDomainData, DomainCheckData, AppsListData, DomainConnectData } from '@/api-types';
 
 interface DomainSettingsCardProps {
     className?: string;
@@ -54,11 +54,13 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
     const [checking, setChecking] = useState(false);
     const [checkResult, setCheckResult] = useState<DomainCheckData | null>(null);
 
-    // Add domain dialog state
+    // Connect domain dialog state
     const [addDialogOpen, setAddDialogOpen] = useState(false);
     const [newDomain, setNewDomain] = useState('');
     const [selectedAppId, setSelectedAppId] = useState<string>('');
-    const [adding, setAdding] = useState(false);
+    const [connecting, setConnecting] = useState(false);
+    const [connectResult, setConnectResult] = useState<DomainConnectData | null>(null);
+    const [manualDialogOpen, setManualDialogOpen] = useState(false);
 
     // Link domain dialog state
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -115,7 +117,7 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
         }
     };
 
-    const handleBuyOnNamecheap = async () => {
+    const handlePurchaseLink = async () => {
         if (!checkResult?.domain) return;
 
         try {
@@ -129,24 +131,37 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
         }
     };
 
-    const handleAddDomain = async () => {
-        if (!newDomain.trim()) return;
+    const handleConnectDomain = async () => {
+        if (!newDomain.trim() || !selectedAppId) {
+            toast.error('Domain and store are required');
+            return;
+        }
 
         try {
-            setAdding(true);
-            const response = await apiClient.addDomain(newDomain, selectedAppId || undefined);
-            if (response.success) {
-                toast.success('Domain added successfully');
+            setConnecting(true);
+            setConnectResult(null);
+            const response = await apiClient.connectDomain(newDomain, selectedAppId);
+            if (response.success && response.data) {
+                const result = response.data;
+                toast.success('Domain added. Continue setup to finish DNS');
                 setAddDialogOpen(false);
                 setNewDomain('');
                 setSelectedAppId('');
                 loadDomains();
+                setConnectResult(result);
+
+                if (result.mode === 'domain-connect' && result.applyUrl) {
+                    window.open(result.applyUrl, '_blank');
+                    toast.info('Approve DNS changes with your domain provider, then return here.');
+                } else {
+                    setManualDialogOpen(true);
+                }
             }
         } catch (error) {
             console.error('Error adding domain:', error);
-            toast.error('Failed to add domain');
+            toast.error('Failed to connect domain');
         } finally {
-            setAdding(false);
+            setConnecting(false);
         }
     };
 
@@ -262,15 +277,19 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
                                         {checkResult.available ? 'Available!' : 'Not available'}
                                     </span>
                                 </div>
-                                {checkResult.available && (
+                                {checkResult.available ? (
                                     <Button
                                         size="sm"
-                                        onClick={handleBuyOnNamecheap}
+                                        onClick={handlePurchaseLink}
                                         className="gap-1"
                                     >
                                         <ExternalLink className="h-4 w-4" />
-                                        Buy on Namecheap
+                                        Buy a Domain
                                     </Button>
+                                ) : (
+                                    <span className="text-sm text-text-tertiary">
+                                        Own it already? Connect it below.
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -282,7 +301,7 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
                     <div>
                         <p className="font-medium">Your Domains</p>
                         <p className="text-sm text-text-tertiary">
-                            Link domains you've purchased to your stores
+                            Connect a domain and we will handle DNS automatically when supported
                         </p>
                     </div>
                     <Button
@@ -291,7 +310,7 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
                         className="gap-2"
                     >
                         <Globe className="h-4 w-4" />
-                        Add Domain
+                        Connect Domain
                     </Button>
                 </div>
 
@@ -304,7 +323,7 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
                     <div className="text-center py-8 border-2 border-dashed rounded-lg">
                         <Globe className="h-8 w-8 text-text-tertiary mx-auto mb-2" />
                         <p className="text-sm text-text-tertiary">
-                            No domains linked yet. Purchase a domain on Namecheap, then add it here.
+                            No domains linked yet. Buy a domain anywhere, then connect it here.
                         </p>
                     </div>
                 ) : (
@@ -389,9 +408,9 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
             <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Add Domain</DialogTitle>
+                        <DialogTitle>Connect Domain</DialogTitle>
                         <DialogDescription>
-                            Enter the domain you purchased on Namecheap.
+                            Enter a domain you own and we will handle DNS automatically when possible.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
@@ -404,7 +423,7 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Link to Store (Optional)</Label>
+                            <Label>Link to Store</Label>
                             <Select value={selectedAppId} onValueChange={setSelectedAppId}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Select a store" />
@@ -423,8 +442,38 @@ export function DomainSettingsCard({ className }: DomainSettingsCardProps) {
                         <Button variant="outline" onClick={() => setAddDialogOpen(false)}>
                             Cancel
                         </Button>
-                        <Button onClick={handleAddDomain} disabled={adding || !newDomain.trim()}>
-                            {adding ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Add Domain'}
+                        <Button onClick={handleConnectDomain} disabled={connecting || !newDomain.trim() || !selectedAppId}>
+                            {connecting ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Connect Domain'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Manual DNS Dialog */}
+            <Dialog open={manualDialogOpen} onOpenChange={setManualDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Manual DNS Setup</DialogTitle>
+                        <DialogDescription>
+                            We could not complete Domain Connect for this provider. Add the CNAME records below.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 py-4 text-sm">
+                        <div className="rounded-lg border border-border-primary bg-bg-3/50 p-3">
+                            <p className="font-medium text-text-primary">CNAME @</p>
+                            <p className="text-text-tertiary">{connectResult?.targetHost}</p>
+                        </div>
+                        <div className="rounded-lg border border-border-primary bg-bg-3/50 p-3">
+                            <p className="font-medium text-text-primary">CNAME www</p>
+                            <p className="text-text-tertiary">{connectResult?.targetHost}</p>
+                        </div>
+                        <p className="text-text-tertiary">
+                            DNS changes can take up to 24 hours to propagate. Your domain will show as pending until it resolves.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button onClick={() => setManualDialogOpen(false)}>
+                            Done
                         </Button>
                     </DialogFooter>
                 </DialogContent>

@@ -8,6 +8,8 @@ import { ApiResponse, ControllerResponse } from '../types';
 import { RouteContext } from '../../types/route-context';
 import { DomainService } from '../../../services/domain';
 import { UserDomainService } from '../../../database/services/UserDomainService';
+import { AppService } from '../../../database/services/AppService';
+import { getPreviewDomain } from '../../../utils/urls';
 import type {
     DomainCheckData,
     DomainPurchaseUrlData,
@@ -15,6 +17,7 @@ import type {
     DomainLinkData,
     DomainDeleteData,
     DomainCreateData,
+    DomainConnectData,
     SubdomainCheckData,
     SubdomainUpdateData,
 } from './types';
@@ -66,7 +69,7 @@ export class DomainController extends BaseController {
     }
 
     /**
-     * Get Namecheap purchase URL for a domain
+     * Get a purchase URL for a domain
      * GET /api/domain/purchase-url?domain=
      */
     static async getPurchaseUrl(
@@ -141,7 +144,7 @@ export class DomainController extends BaseController {
     }
 
     /**
-     * Add a domain (after user purchased on Namecheap)
+     * Add a domain (manual flow)
      * POST /api/domain
      */
     static async addDomain(
@@ -195,6 +198,129 @@ export class DomainController extends BaseController {
             this.logger.error('Error adding domain', error);
             return DomainController.createErrorResponse<DomainCreateData>(
                 'Failed to add domain',
+                500
+            );
+        }
+    }
+
+    /**
+     * Start domain connect flow (Domain Connect if available, otherwise manual)
+     * POST /api/domain/connect
+     */
+    static async connectDomain(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext
+    ): Promise<ControllerResponse<ApiResponse<DomainConnectData>>> {
+        try {
+            const user = context.user!;
+            const body = await request.json() as { domain: string; appId: string };
+
+            if (!body.domain || !body.appId) {
+                return DomainController.createErrorResponse<DomainConnectData>(
+                    'Domain and app ID are required',
+                    400
+                );
+            }
+
+            const domainService = new DomainService();
+            const normalizedDomain = domainService.normalizeDomain(body.domain);
+            if (!domainService.isValidDomain(normalizedDomain)) {
+                return DomainController.createErrorResponse<DomainConnectData>(
+                    'Invalid domain format',
+                    400
+                );
+            }
+
+            const appService = new AppService(env);
+            const ownership = await appService.checkAppOwnership(body.appId, user.id);
+            if (!ownership.exists) {
+                return DomainController.createErrorResponse<DomainConnectData>(
+                    'App not found',
+                    404
+                );
+            }
+            if (!ownership.isOwner) {
+                return DomainController.createErrorResponse<DomainConnectData>(
+                    'You do not own this app',
+                    403
+                );
+            }
+
+            const appDetails = await appService.getAppDetails(body.appId, user.id);
+            if (!appDetails?.deploymentId) {
+                return DomainController.createErrorResponse<DomainConnectData>(
+                    'Deploy your store before connecting a custom domain',
+                    400
+                );
+            }
+
+            const previewDomain = getPreviewDomain(env);
+            if (!previewDomain) {
+                return DomainController.createErrorResponse<DomainConnectData>(
+                    'Custom domain support is not configured',
+                    500
+                );
+            }
+
+            const targetHost = `${appDetails.deploymentId}.${previewDomain}`;
+            const domainDbService = new UserDomainService(env);
+
+            let existing = await domainDbService.getByDomain(normalizedDomain);
+            if (existing && existing.userId !== user.id) {
+                return DomainController.createErrorResponse<DomainConnectData>(
+                    'Domain is already registered to another account',
+                    409
+                );
+            }
+
+            if (!existing) {
+                existing = await domainDbService.create({
+                    userId: user.id,
+                    domain: normalizedDomain,
+                    appId: body.appId,
+                });
+            } else {
+                await domainDbService.update(existing.id, user.id, { appId: body.appId, status: 'pending' });
+                const refreshed = await domainDbService.getById(existing.id);
+                if (!refreshed) {
+                    throw new Error('Failed to refresh domain record');
+                }
+                existing = refreshed;
+            }
+
+            const connectSupport = await domainService.discoverDomainConnect(normalizedDomain);
+            const hasDomainConnect = !!connectSupport?.settings.urlSyncUX;
+            const mode = hasDomainConnect ? 'domain-connect' : 'manual';
+            const applyUrl = hasDomainConnect && connectSupport
+                ? domainService.buildDomainConnectApplyUrl(connectSupport.settings, normalizedDomain, targetHost)
+                : undefined;
+
+            const data: DomainConnectData = {
+                mode,
+                domain: {
+                    id: existing.id,
+                    domain: existing.domain,
+                    status: existing.status as 'pending' | 'verified' | 'active' | 'expired',
+                    appId: existing.appId,
+                    app: null,
+                    createdAt: existing.createdAt,
+                },
+                targetHost,
+                applyUrl: applyUrl || undefined,
+                provider: connectSupport ? {
+                    id: connectSupport.settings.providerId,
+                    name: connectSupport.settings.providerName,
+                    displayName: connectSupport.settings.providerDisplayName,
+                } : undefined,
+            };
+
+            return DomainController.createSuccessResponse(data);
+        } catch (error) {
+            this.logger.error('Error starting domain connect flow', error);
+            return DomainController.createErrorResponse<DomainConnectData>(
+                'Failed to start domain connection',
                 500
             );
         }

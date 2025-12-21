@@ -1286,7 +1286,7 @@ class ApiClient {
 	}
 
 	/**
-	 * Add a domain (after purchasing on Namecheap)
+	 * Add a domain (manual flow)
 	 */
 	async addDomain(domain: string, appId?: string): Promise<ApiResponse<DomainCreateData>> {
 		return this.request<DomainCreateData>('/api/domain', {

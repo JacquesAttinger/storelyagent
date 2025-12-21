@@ -48,6 +48,18 @@ export interface DomainCreateData {
     domain: UserDomainData;
 }
 
+export interface DomainConnectData {
+    mode: 'domain-connect' | 'manual';
+    domain: UserDomainData;
+    targetHost: string;
+    applyUrl?: string;
+    provider?: {
+        id: string;
+        name: string;
+        displayName?: string;
+    };
+}
+
 // Subdomain (storelyshop.com subdomain) Types
 
 export interface SubdomainCheckData {

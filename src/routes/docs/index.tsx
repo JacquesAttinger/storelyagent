@@ -225,7 +225,7 @@ export default function DocsPage() {
 
                         {/* Custom Domains */}
                         <AccordionItem
-                            title="Custom Domains (Namecheap)"
+                            title="Custom Domains"
                             icon={<Globe className="h-5 w-5" />}
                             isOpen={openSection === 'domains'}
                             onToggle={() => toggleSection('domains')}
@@ -233,7 +233,7 @@ export default function DocsPage() {
                             <p className="text-sm leading-relaxed mb-4">
                                 Use your own custom domain (like <code className="text-xs bg-bg-3 px-1 py-0.5 rounded">mystore.com</code>)
                                 instead of the default <code className="text-xs bg-bg-3 px-1 py-0.5 rounded">store.storelyshop.com</code>.
-                                Storely integrates with Namecheap for domain purchasing.
+                                Storely keeps domain ownership with you and automates DNS when your provider supports Domain Connect.
                             </p>
 
                             <div className="space-y-5 mb-6">
@@ -241,28 +241,29 @@ export default function DocsPage() {
                                     Go to <strong>Settings → Custom Domains</strong>. Enter your desired domain name
                                     and click search. We'll check if it's available for purchase.
                                 </Step>
-                                <Step number={2} title="Purchase on Namecheap">
-                                    If available, click <strong>"Buy on Namecheap"</strong>. You'll be redirected to
-                                    Namecheap to complete the purchase. You own the domain directly through Namecheap.
+                                <Step number={2} title="Buy a Domain (Optional)">
+                                    Purchase your domain from any registrar you prefer. If you need an option,
+                                    the purchase link in settings will take you to a registrar checkout.
                                 </Step>
-                                <Step number={3} title="Add Domain to Storely">
-                                    After purchasing, return to Settings and click <strong>"Add Domain"</strong>.
-                                    Enter your domain name to register it with Storely.
+                                <Step number={3} title="Connect Your Domain">
+                                    Click <strong>"Connect Domain"</strong>, enter your domain, and select the store to link.
+                                    Storely will attempt an automatic DNS setup using Domain Connect.
                                 </Step>
-                                <Step number={4} title="Link to Your Store">
-                                    Select which store you want to use with this domain. Your store will be accessible
-                                    at both the custom domain and the original Storely URL.
+                                <Step number={4} title="Approve DNS Changes">
+                                    If your DNS provider supports Domain Connect, a confirmation window opens. Approve
+                                    the changes and your domain will point to your Storely site. If not supported,
+                                    Storely will show the manual CNAME records to add.
                                 </Step>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <div>
-                                    <h4 className="font-medium text-text-primary mb-2">Why Namecheap?</h4>
+                                    <h4 className="font-medium text-text-primary mb-2">What This Enables</h4>
                                     <div className="space-y-2">
                                         <FeatureItem>You own the domain directly</FeatureItem>
-                                        <FeatureItem>Competitive pricing</FeatureItem>
-                                        <FeatureItem>Full DNS control</FeatureItem>
-                                        <FeatureItem>Free WhoisGuard privacy</FeatureItem>
+                                        <FeatureItem>Works with new or existing domains</FeatureItem>
+                                        <FeatureItem>Automatic DNS when supported</FeatureItem>
+                                        <FeatureItem>Manual CNAME fallback when needed</FeatureItem>
                                     </div>
                                 </div>
                                 <div>
@@ -279,10 +280,10 @@ export default function DocsPage() {
                             </div>
 
                             <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
-                                <h4 className="font-medium text-text-primary mb-2">⚙️ DNS Configuration</h4>
+                                <h4 className="font-medium text-text-primary mb-2">DNS Configuration</h4>
                                 <p className="text-sm text-text-secondary">
-                                    After adding your domain, you'll need to configure DNS settings in Namecheap to point to Storely.
-                                    We provide the exact records you need to add. Changes typically propagate within 24-48 hours.
+                                    If Domain Connect is not available for your provider, Storely will show the exact CNAME
+                                    records to add. Changes typically propagate within 24-48 hours.
                                 </p>
                             </div>
                         </AccordionItem>
