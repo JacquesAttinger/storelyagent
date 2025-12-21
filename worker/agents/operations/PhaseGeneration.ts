@@ -59,6 +59,8 @@ const SYSTEM_PROMPT = `<ROLE>
       3. price: A realistic price for the store type (e.g., $29.99)
       4. imageUrl: NULL (use CSS placeholder styling in templates)
     - The shop page (/products) MUST display this sample product correctly
+    - Do NOT add any other sample products in seed.sql
+    - Do NOT seed any sample users/admins in seed.sql; the store creator is the only initial user/admin
     
     - DO NOT touch:
       - Backend API routes or server-side logic
