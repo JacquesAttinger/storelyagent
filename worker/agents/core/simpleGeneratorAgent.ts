@@ -2988,13 +2988,14 @@ export class SimpleCodeGeneratorAgent extends Agent<Env, CodeGenState> {
                 // Initialize with updated query and selected template
                 // Note: onBlueprintChunk callback is not needed here since we're initializing via WebSocket
                 // The blueprint will be generated but not streamed to the initial HTTP response
+                const processedImages = await this.ensureProcessedImages(images || pendingInitArgs.images);
                 await this.initialize({
                     query: updatedQuery,
                     language: pendingInitArgs.language,
                     frameworks: pendingInitArgs.frameworks,
                     hostname: pendingInitArgs.hostname,
                     inferenceContext: pendingInitArgs.inferenceContext,
-                    images: images || pendingInitArgs.images,
+                    images: processedImages,
                     templateInfo: { templateDetails, selection },
                     onBlueprintChunk: () => { } // No-op callback since we're not streaming to HTTP response
                 }, this.state.agentMode);

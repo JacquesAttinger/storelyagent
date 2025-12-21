@@ -9,6 +9,7 @@
 		"dev": "DEV_MODE=true vite",
 		"build": "tsc -b --incremental && vite build",
 		"typecheck": "tsc -b --incremental --noEmit",
+		"typecheck:worker": "tsc --noEmit -p tsconfig.worker.json",
 		"lint": "eslint .",
 		"preview": "npm run build && vite preview",
 		"deploy": "bun --env-file .prod.vars scripts/deploy.ts",
