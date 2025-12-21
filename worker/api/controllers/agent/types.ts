@@ -20,4 +20,8 @@ export interface AgentConnectionData {
 
 export interface AgentPreviewResponse extends PreviewType {
 }
+
+export interface AgentCloudflareDeployResponse {
+    deploymentUrl: string;
+}
     

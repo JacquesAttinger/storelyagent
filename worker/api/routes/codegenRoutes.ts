@@ -29,6 +29,8 @@ export function setupCodegenRoutes(app: Hono<AppEnv>): void {
 
     app.get('/api/agent/:agentId/preview', setAuthLevel(AuthConfig.authenticated), adaptController(CodingAgentController, CodingAgentController.deployPreview));
 
+    app.post('/api/agent/:agentId/deploy', setAuthLevel(AuthConfig.ownerOnly), adaptController(CodingAgentController, CodingAgentController.deployToCloudflare));
+
     // Get generated files - NO AUTH for local development CLI access
     // In production, this endpoint should be removed or properly secured
     app.get('/api/agent/:agentId/files', setAuthLevel(AuthConfig.public), adaptController(CodingAgentController, CodingAgentController.getGeneratedFiles));

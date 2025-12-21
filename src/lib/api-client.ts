@@ -48,6 +48,7 @@ import type {
 	StripeConnectDisconnectData,
 	DomainCheckData,
 	DomainPurchaseUrlData,
+	DomainConnectData,
 	UserDomainsListData,
 	DomainLinkData,
 	DomainDeleteData,
@@ -67,6 +68,7 @@ import type {
 	OAuthProvider,
 	CodeGenArgs,
 	AgentPreviewResponse,
+	AgentCloudflareDeployResponse,
 	PlatformStatusData,
 	RateLimitError
 } from '@/api-types';
@@ -1065,6 +1067,20 @@ class ApiClient {
 		);
 	}
 
+	/**
+	 * Deploy to Cloudflare (live)
+	 */
+	async deployToCloudflare(
+		agentId: string,
+	): Promise<ApiResponse<AgentCloudflareDeployResponse>> {
+		return this.request<AgentCloudflareDeployResponse>(
+			`/api/agent/${agentId}/deploy`,
+			{
+				method: 'POST',
+			},
+		);
+	}
+
 	// ===============================
 	// Session Management API Methods
 	// ===============================
@@ -1256,7 +1272,7 @@ class ApiClient {
 	}
 
 	/**
-	 * Get Namecheap purchase URL for a domain
+	 * Get purchase URL for a domain
 	 */
 	async getDomainPurchaseUrl(domain: string): Promise<ApiResponse<DomainPurchaseUrlData>> {
 		return this.request<DomainPurchaseUrlData>(`/api/domain/purchase-url?domain=${encodeURIComponent(domain)}`);
@@ -1274,6 +1290,16 @@ class ApiClient {
 	 */
 	async addDomain(domain: string, appId?: string): Promise<ApiResponse<DomainCreateData>> {
 		return this.request<DomainCreateData>('/api/domain', {
+			method: 'POST',
+			body: { domain, appId },
+		});
+	}
+
+	/**
+	 * Start domain connect flow
+	 */
+	async connectDomain(domain: string, appId: string): Promise<ApiResponse<DomainConnectData>> {
+		return this.request<DomainConnectData>('/api/domain/connect', {
 			method: 'POST',
 			body: { domain, appId },
 		});

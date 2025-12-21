@@ -118,6 +118,7 @@ export type {
 export type {
   DomainCheckData,
   DomainPurchaseUrlData,
+  DomainConnectData,
   UserDomainsListData,
   DomainLinkData,
   DomainDeleteData,
@@ -187,7 +188,7 @@ export type {
 } from 'worker/agents/inferutils/config.types';
 
 export type { RateLimitError } from "worker/services/rate-limit/errors";
-export type { AgentPreviewResponse, CodeGenArgs } from 'worker/api/controllers/agent/types';
+export type { AgentPreviewResponse, AgentCloudflareDeployResponse, CodeGenArgs } from 'worker/api/controllers/agent/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from 'shared/types/errors';
 

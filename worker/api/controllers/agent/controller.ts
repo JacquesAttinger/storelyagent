@@ -3,7 +3,7 @@ import { BaseController } from '../baseController';
 import { generateId } from '../../../utils/idGenerator';
 import { CodeGenState } from '../../../agents/core/state';
 import { getAgentStub, getTemplateForQuery } from '../../../agents';
-import { AgentConnectionData, AgentPreviewResponse, CodeGenArgs } from './types';
+import { AgentConnectionData, AgentPreviewResponse, AgentCloudflareDeployResponse, CodeGenArgs } from './types';
 import { ApiResponse, ControllerResponse } from '../types';
 import { RouteContext } from '../../types/route-context';
 import { ModelConfigService } from '../../../database';
@@ -527,6 +527,47 @@ export class CodingAgentController extends BaseController {
         } catch (error) {
             this.logger.error('Error deploying preview', error);
             const appError = CodingAgentController.handleError(error, 'deploy preview') as ControllerResponse<ApiResponse<AgentPreviewResponse>>;
+            return appError;
+        }
+    }
+
+    static async deployToCloudflare(
+        _request: Request,
+        env: Env,
+        _: ExecutionContext,
+        context: RouteContext
+    ): Promise<ControllerResponse<ApiResponse<AgentCloudflareDeployResponse>>> {
+        try {
+            const agentId = context.pathParams.agentId;
+            if (!agentId) {
+                return CodingAgentController.createErrorResponse<AgentCloudflareDeployResponse>('Missing agent ID parameter', 400);
+            }
+
+            this.logger.info(`Deploying to Cloudflare for agent: ${agentId}`);
+
+            try {
+                const agentInstance = await getAgentStub(env, agentId);
+                const deployment = await agentInstance.deployToCloudflare();
+
+                if (!deployment?.deploymentUrl) {
+                    return CodingAgentController.createErrorResponse<AgentCloudflareDeployResponse>('Failed to deploy to Cloudflare', 500);
+                }
+
+                this.logger.info('Cloudflare deployment completed', {
+                    agentId,
+                    deploymentUrl: deployment.deploymentUrl
+                });
+
+                return CodingAgentController.createSuccessResponse({
+                    deploymentUrl: deployment.deploymentUrl
+                });
+            } catch (error) {
+                this.logger.error('Failed to deploy to Cloudflare', { agentId, error });
+                return CodingAgentController.createErrorResponse<AgentCloudflareDeployResponse>('Failed to deploy to Cloudflare', 500);
+            }
+        } catch (error) {
+            this.logger.error('Error deploying to Cloudflare', error);
+            const appError = CodingAgentController.handleError(error, 'deploy to cloudflare') as ControllerResponse<ApiResponse<AgentCloudflareDeployResponse>>;
             return appError;
         }
     }

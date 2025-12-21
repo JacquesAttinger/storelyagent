@@ -21,8 +21,6 @@ import {
 	Bookmark,
 	Globe,
 	Trash2,
-	Github,
-	GitBranch,
 } from 'lucide-react';
 import { MonacoEditor } from '@/components/monaco-editor/monaco-editor';
 import { getFileType } from '@/utils/string';
@@ -40,10 +38,8 @@ import { useAuth } from '@/contexts/auth-context';
 import { toggleFavorite } from '@/hooks/use-apps';
 import { formatDistanceToNow, isValid } from 'date-fns';
 import { toast } from 'sonner';
-import { capitalizeFirstLetter, cn, getPreviewUrl } from '@/lib/utils';
+import { capitalizeFirstLetter, cn } from '@/lib/utils';
 import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
-import { GitCloneModal } from '@/components/shared/GitCloneModal';
-import { GitCloneCommand, GitClonePrivatePrompt } from '@/components/shared/GitCloneInline';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { PreviewIframe } from '../chat/components/preview-iframe';
 
@@ -96,7 +92,6 @@ export default function AppView() {
 	const [isUpdatingVisibility, setIsUpdatingVisibility] = useState(false);
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [isDeleting, setIsDeleting] = useState(false);
-	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
 	const [activeFilePath, setActiveFilePath] = useState<string>();
 	const previewIframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -383,38 +378,36 @@ export default function AppView() {
 		return app?.cloudflareUrl || app?.previewUrl || '';
 	};
 
-	const handlePreviewDeploy = async () => {
+	const handleLiveDeploy = async () => {
 		if (!app || isDeploying) return;
 
 		try {
 			setIsDeploying(true);
-			setDeploymentProgress('Connecting to agent...');
-            const response = await apiClient.deployPreview(app.id);
-            if (response.success && response.data) {
-                const data = response.data;
-                if (data.previewURL || data.tunnelURL) {
-                    const newUrl = getPreviewUrl(
-                        data.previewURL,
-                        data.tunnelURL,
-                    );
-                    setApp((prev) =>
-                        prev
-                            ? {
-                                    ...prev,
-                                    cloudflareUrl: newUrl,
-                                    previewUrl: newUrl,
-                                }
-                            : null,
-                    );
-                    setDeploymentProgress('Deployment complete!');
-                }
-            }
-            setIsDeploying(false);
+			setDeploymentProgress('Deploying to Cloudflare...');
+			const response = await apiClient.deployToCloudflare(app.id);
+			if (response.success && response.data?.deploymentUrl) {
+				const newUrl = response.data.deploymentUrl;
+				setApp((prev) =>
+					prev
+						? {
+								...prev,
+								cloudflareUrl: newUrl,
+							}
+						: null,
+				);
+				setDeploymentProgress('Deployment complete!');
+				toast.success('Deployment complete!');
+			} else {
+				throw new Error(
+					response.error?.message || 'Failed to deploy to Cloudflare',
+				);
+			}
 		} catch (error) {
 			console.error('Error starting deployment:', error);
-			setDeploymentProgress('Failed to start deployment');
+			setDeploymentProgress('Failed to deploy');
+			toast.error('Failed to deploy');
+		} finally {
 			setIsDeploying(false);
-			toast.error('Failed to start deployment');
 		}
 	};
 
@@ -611,39 +604,24 @@ export default function AppView() {
 									{isStarred ? 'Starred' : 'Star'}
 								</Button>
 
-								{/* Git Clone Button */}
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setIsGitCloneModalOpen(true)}
-									className="gap-2 text-text-primary"
-								>
-									<GitBranch className="h-4 w-4" />
-									Git Clone
-								</Button>
-
-								{/* GitHub Repository Button */}
-								{app.githubRepositoryUrl && (
+								{isOwner && (
 									<Button
 										variant="outline"
 										size="sm"
-										onClick={() => {
-											if (app.githubRepositoryUrl) {
-												window.open(
-													app.githubRepositoryUrl,
-													'_blank',
-													'noopener,noreferrer',
-												);
-											}
-										}}
-										className={cn('gap-2 text-text-primary')}
-										title={`View on GitHub (${app.githubRepositoryVisibility || 'public'})`}
+										onClick={handleLiveDeploy}
+										disabled={isDeploying}
+										className="gap-2 text-text-primary"
 									>
-										<Github className="h-4 w-4" />
-										View on GitHub
-										{app.githubRepositoryVisibility ===
-											'private' && (
-											<Lock className="h-3 w-3 opacity-70" />
+										{isDeploying ? (
+											<>
+												<Loader2 className="h-4 w-4 animate-spin" />
+												Deploying...
+											</>
+										) : (
+											<>
+												<Play className="h-4 w-4" />
+												Deploy Live
+											</>
 										)}
 									</Button>
 								)}
@@ -731,7 +709,7 @@ export default function AppView() {
 					onValueChange={setActiveTab}
 					className="flex flex-col flex-1 gap-2"
 				>
-					{/* Tab switcher and Git Clone inline */}
+					{/* Tab switcher */}
 					<div className="flex items-center gap-4">
 						{/* Using proper TabsList and TabsTrigger components */}
 						<TabsList className="inline-flex h-auto w-fit items-center gap-0.5 bg-bg-2 dark:bg-bg-1 rounded-md p-0.5 border border-border-primary/30">
@@ -767,19 +745,6 @@ export default function AppView() {
 						</TabsTrigger>
 						</TabsList>
 						
-						{/* Git Clone - Inline with tabs */}
-						<div className="flex-shrink-0">
-							{app.visibility === 'public' ? (
-								<GitCloneCommand
-									cloneUrl={`${window.location.protocol}//${window.location.host}/apps/${app.id}.git`}
-									appTitle={app.title}
-								/>
-							) : isOwner ? (
-								<GitClonePrivatePrompt
-									onOpenModal={() => setIsGitCloneModalOpen(true)}
-								/>
-							) : null}
-						</div>
 					</div>
 
 					<TabsContent value="preview" className="flex-1">
@@ -841,11 +806,11 @@ export default function AppView() {
 											<div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex items-center justify-center z-10">
 												<div className="text-center p-8">
 													<h3 className="text-xl font-semibold mb-2 text-gray-700">
-														Run App
+														Deploy Live
 													</h3>
 													<p className="text-gray-500 mb-6 max-w-md">
-														Run the app to see a
-														live preview.
+														Deploy your store to
+														get a live URL.
 													</p>
 													{deploymentProgress && (
 														<p className="text-sm text-gray-800 mb-4">
@@ -853,28 +818,34 @@ export default function AppView() {
 														</p>
 													)}
 													<div className="flex gap-3 justify-center">
-														<Button
-															onClick={
-																handlePreviewDeploy
-															}
-															disabled={
-																isDeploying
-															}
-															className="gap-2"
-														>
-															{isDeploying ? (
-																<>
-																	<Loader2 className="h-4 w-4 animate-spin" />
-																	Deploying...
-																</>
-															) : (
-																<>
-																	<Play className="h-4 w-4" />
-																	Deploy for
-																	Preview
-																</>
-															)}
-														</Button>
+														{isOwner ? (
+															<Button
+																onClick={
+																	handleLiveDeploy
+																}
+																disabled={
+																	isDeploying
+																}
+																className="gap-2"
+															>
+																{isDeploying ? (
+																	<>
+																		<Loader2 className="h-4 w-4 animate-spin" />
+																		Deploying...
+																	</>
+																) : (
+																	<>
+																		<Play className="h-4 w-4" />
+																		Deploy Live
+																	</>
+																)}
+															</Button>
+														) : (
+															<p className="text-sm text-gray-500">
+																Live deployment is
+																owner-only.
+															</p>
+														)}
 													</div>
 												</div>
 											</div>
@@ -1104,15 +1075,6 @@ export default function AppView() {
 				appTitle={app?.title}
 			/>
 
-			{/* Git Clone Modal */}
-			<GitCloneModal
-				open={isGitCloneModalOpen}
-				onOpenChange={setIsGitCloneModalOpen}
-				appId={app.id}
-				appTitle={app.title}
-				isPublic={app.visibility === 'public'}
-				isOwner={isOwner}
-			/>
 		</div>
 	);
 }
