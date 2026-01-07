@@ -114,6 +114,7 @@
 	// "placement": {
 	//   "mode": "smart"
 	// },
+	//
 	"migrations": [
 		{
 			"new_sqlite_classes": [
