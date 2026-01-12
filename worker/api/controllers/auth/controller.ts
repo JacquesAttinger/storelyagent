@@ -69,7 +69,7 @@ export class AuthController extends BaseController {
                 !allowedEmails.includes(validatedData.email.toLowerCase())
             ) {
                 return AuthController.createErrorResponse(
-                    'Email whitelisting is enabled. Please use an allowed email to log in.',
+                    'Email Whitelisting is enabled. Please use the allowed email to register.',
                     403
                 );
             }
